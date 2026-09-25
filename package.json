@@ -1,0 +1,23 @@
+{
+  "name": "oficin-ia-checklist-v15-21-producao-pdf-equipe",
+  "version": "15.21.0",
+  "private": true,
+  "description": "OFICIN-IA Checklist V15.21: salvar a qualquer momento, fluxo Em Produção, retomada/edição e PDF simples para equipe/WhatsApp.",
+  "scripts": {
+    "prepare:apk": "node scripts/prepare-apk.js",
+    "android:icons": "node scripts/generate-android-icons.js",
+    "cap:add": "npx cap add android",
+    "cap:sync": "npx cap sync android",
+    "build:android": "npm run prepare:apk && if [ ! -d android ]; then npx cap add android; fi && npx cap sync android && npm run android:icons && cd android && chmod +x ./gradlew && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "6.2.1",
+    "@capacitor/core": "6.2.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "6.2.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
