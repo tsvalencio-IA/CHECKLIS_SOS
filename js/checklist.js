@@ -1406,14 +1406,25 @@ function joinUrl(base, page=''){
   if(!b) return '';
   return b.replace(/\/+$/,'/') + String(page||'').replace(/^\/+/, '');
 }
+function normalizeSaasBaseUrl(url){
+  const official=(APP.saasBaseUrl||'https://tsvalencio-ia.github.io/SAAS-2/').trim();
+  const value=String(url||'').trim();
+  if(!value) return official;
+  if(/OFICIN-IA-COM_IA|OFICIN-IA(?:\/|$)|oficin-ia-com-ia\.vercel\.app/i.test(value)) return official;
+  return value;
+}
 function resolveSaasBaseUrl(){
   const saved=(localStorage.getItem('OFICINIA_SAAS_BASE_URL')||'').trim();
-  if(saved) return saved;
+  if(saved){
+    const corrected=normalizeSaasBaseUrl(saved);
+    if(corrected!==saved) localStorage.setItem('OFICINIA_SAAS_BASE_URL',corrected);
+    return corrected;
+  }
   const cfg=(APP.saasBaseUrl||'').trim();
-  if(cfg) return cfg;
+  if(cfg) return normalizeSaasBaseUrl(cfg);
   const host=(location.hostname||'').toLowerCase();
-  if(host.endsWith('.github.io')) return `https://${host.split('.')[0]}.github.io/OFICIN-IA-COM_IA/`;
-  return 'https://tsvalencio-ia.github.io/OFICIN-IA-COM_IA/';
+  if(host.endsWith('.github.io')) return `https://${host.split('.')[0]}.github.io/SAAS-2/`;
+  return 'https://tsvalencio-ia.github.io/SAAS-2/';
 }
 function saasEntryPage(){ return isGestor() ? 'jarvis.html' : 'equipe.html'; }
 function abrirSaas(){
