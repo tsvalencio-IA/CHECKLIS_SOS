@@ -36,8 +36,8 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const pkg = {
-            name: 'oficin-ia-checklist-v15-21-producao-pdf-equipe',
-            version: '15.21.0',
+            name: 'oficin-ia-checklist-v15-22-tempo-real-microfone',
+            version: '15.22.0',
             private: true,
             description: 'OFICIN-IA Checklist V15.22 com sincronização em tempo real, acompanhamento ao vivo e observações por voz.',
             scripts: {
@@ -47,7 +47,8 @@ jobs:
             },
             dependencies: {
               '@capacitor/android': '6.2.1',
-              '@capacitor/core': '6.2.1'
+              '@capacitor/core': '6.2.1',
+              '@capacitor-community/speech-recognition': '6.0.1'
             },
             devDependencies: {
               '@capacitor/cli': '6.2.1'
