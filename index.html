@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Checklist">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="Checklist técnico automotivo separado do SaaS, integrado ao mesmo Firebase, com seleção de O.S. pela placa.">
+  <meta name="description" content="Checklist técnico automotivo em tempo real para PC e celular, integrado ao mesmo Firebase, com observações por voz e seleção de O.S. pela placa.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./assets/icons/checklist-192.png">
   <link rel="apple-touch-icon" href="./assets/icons/checklist-192.png">
@@ -42,7 +42,7 @@
 <body>
   <header class="top">
     <div class="topin">
-      <div class="brand"><div class="mark">CL</div><div><h1 id="brandName">Checklist Inteligente OFICIN-IA</h1><small id="brandSub">Repositório separado • APK próprio • mesmo Firebase</small></div></div>
+      <div class="brand"><div class="mark">CL</div><div><h1 id="brandName">Checklist Inteligente OFICIN-IA</h1><small id="brandSub">PC + celular • tempo real • APK próprio • mesmo Firebase</small></div></div>
       <div class="top-actions"><span class="pill" id="sessPill">🔒 Bloqueado</span><button class="btn secondary small hidden" id="btnHomeTop" type="button">🏠 Início</button><button class="btn secondary small" id="btnTheme" type="button">🌗</button><button class="btn secondary small hidden" id="btnLogout" type="button">Sair</button></div>
     </div>
   </header>
@@ -68,7 +68,7 @@
         <div class="workflow-card"><b>🔧 Em produção</b><small>Abre checklists incompletos salvos para continuar exatamente de onde parou.</small><button class="btn warn small" id="btnEmProducao" type="button">Abrir em produção</button></div>
         <div class="workflow-card"><b>📚 Todos os salvos</b><small>Consulta checklists concluídos e em produção, com edição e relatórios.</small><button class="btn secondary small" id="btnTodosSalvos" type="button">Consultar salvos</button></div>
       </div>
-      <div id="currentWorkInfo" class="notice" style="margin-bottom:10px">O preenchimento é salvo automaticamente neste aparelho. Use <b>Salvar agora</b> para gravar no Firebase mesmo com itens pendentes.</div>
+      <div id="currentWorkInfo" class="notice" style="margin-bottom:10px">O preenchimento é salvo no aparelho e sincronizado automaticamente no Firebase em tempo real após informar a placa completa. Gestores podem acompanhar checklists em produção ao vivo.</div>
       <div class="row2"><div><label>Placa</label><input id="placa" class="inp" maxlength="8" placeholder="ABC1D23" autocomplete="off"></div><div><label>O.S. / Prisma / Referência</label><input id="osRef" class="inp" placeholder="Opcional"></div></div>
       <div class="row2" style="margin-top:8px"><div><label>Login/Sessão</label><input id="responsavel" class="inp" readonly></div><div><label>KM atual</label><input id="km" class="inp" inputmode="numeric" placeholder="Ex: 154320"></div></div>
       <div class="row2" style="margin-top:8px"><div><label>Técnico que fez o checklist</label><input id="tecnicoChecklist" class="inp" placeholder="Nome do mecânico/técnico"></div><div><label>Conferente/verificador da entrega</label><input id="verificadorEntrega" class="inp" placeholder="Nome de quem vai conferir a entrega"></div></div>
