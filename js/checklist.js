@@ -8,7 +8,7 @@ const SESSION_KEY = 'OFICINIA_CHECKLIST_V15_SESSION';
 const DRAFT_KEY = 'OFICINIA_CHECKLIST_V15_DRAFT';
 const MODEL_KEY = 'OFICINIA_CHECKLIST_V15_MODEL';
 const THEME_KEY = 'OFICINIA_CHECKLIST_V15_THEME';
-const DEFAULT_BRAND = { name:'Checklist Inteligente OFICIN-IA', subtitle:'App separado • APK próprio • mesmo Firebase', color:'#2563eb', footer:'Powered by thIAguinho Soluções Digitais' };
+const DEFAULT_BRAND = { name:'Checklist Inteligente OFICIN-IA', subtitle:'PC + celular • tempo real • APK próprio • mesmo Firebase', color:'#2563eb', footer:'Powered by thIAguinho Soluções Digitais' };
 const ACTIONS_FINAL = new Set(['atencao','trocar','retificar','regular','ajustar','lubrificar','limpar','revisar']);
 const ACTIONS_COTACAO = new Set(['atencao','trocar','retificar','regular','ajustar','lubrificar','limpar','revisar']);
 const PECA_ACTIONS = new Set(['trocar']);
@@ -134,7 +134,7 @@ function applyBrand(brand={}){
   const b = {...DEFAULT_BRAND, ...(brand||{})};
   document.documentElement.style.setProperty('--brand', b.color || '#2563eb');
   $('brandName').textContent = b.name || DEFAULT_BRAND.name;
-  $('brandSub').textContent = b.subtitle || 'Repositório separado • APK próprio • mesmo Firebase';
+  $('brandSub').textContent = b.subtitle || 'PC + celular • tempo real • APK próprio • mesmo Firebase';
   $('footerBrand').textContent = b.footer || APP.footer || DEFAULT_BRAND.footer;
 }
 
