@@ -316,7 +316,7 @@ function mergeEvolutionModel(base,current){
 }
 async function loadModel(tryRemote=false){
   let base=null; let model=null;
-  try{ const res=await fetch('./data/checklist-model.json?v=15.21.0',{cache:'no-store'}); base=await res.json(); model=base; }catch(e){ console.warn('model local',e); }
+  try{ const res=await fetch('./data/checklist-model.json?v=15.22.0',{cache:'no-store'}); base=await res.json(); model=base; }catch(e){ console.warn('model local',e); }
   try{ const saved=JSON.parse(localStorage.getItem(MODEL_KEY)||'null'); if(saved && saved.secoes) model=mergeEvolutionModel(base,saved); }catch(e){}
   if(tryRemote && state.session){
     try{
@@ -1410,8 +1410,8 @@ function checklistResumoParaOS(data, entrega=false){
   return {
     id:data?.id||state.lastSavedId||uid(),
     tipo: entrega?'entrega':'tecnico',
-    app:data?.app||'OFICIN-IA-CHECKLIST-V15-21',
-    versao:data?.versao||'v15.21',
+    app:data?.app||'OFICIN-IA-CHECKLIST-V15-22',
+    versao:data?.versao||'v15.22',
     modeloVersao:data?.modeloVersao||state.model?.versao||'',
     placa:data?.placa||placaNorm($('placa')?.value||''),
     osRef:data?.osRef||($('osRef')?.value||'').trim(),
