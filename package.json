@@ -1,8 +1,8 @@
 {
-  "name": "oficin-ia-checklist-v15-21-producao-pdf-equipe",
-  "version": "15.21.0",
+  "name": "oficin-ia-checklist-v15-22-tempo-real-microfone",
+  "version": "15.22.0",
   "private": true,
-  "description": "OFICIN-IA Checklist V15.21: salvar a qualquer momento, fluxo Em Produção, retomada/edição e PDF simples para equipe/WhatsApp.",
+  "description": "OFICIN-IA Checklist V15.22: PC e celular em tempo real, acompanhamento ao vivo, observações por voz e PDF de equipe.",
   "scripts": {
     "prepare:apk": "node scripts/prepare-apk.js",
     "android:icons": "node scripts/generate-android-icons.js",
@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@capacitor/android": "6.2.1",
-    "@capacitor/core": "6.2.1"
+    "@capacitor/core": "6.2.1",
+    "@capacitor-community/speech-recognition": "6.0.1"
   },
   "devDependencies": {
     "@capacitor/cli": "6.2.1"
