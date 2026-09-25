@@ -916,38 +916,61 @@ async function deleteCurrentChecklist(){
 async function consultar(statusOverride=''){
   if(typeof statusOverride!=='string') statusOverride='';
   if(statusOverride && $('consultaStatus')) $('consultaStatus').value=statusOverride;
-  go('screenConsulta'); setBusy('btnRodarConsulta',true,'Pesquisando...');
-  const db=activeDb(); const placa=placaNorm($('consultaPlaca')?.value||''); const qtd=Number($('consultaQtd')?.value||20); const filtro=$('consultaStatus')?.value||'todos'; let res=[];
-  try{
-    if(placa){ const snap=await db.collection('checklists').where('placa','==',placa).limit(Math.max(qtd,50)).get(); res=snap.docs.map(d=>({id:d.id,_col:'checklists',...d.data()})); }
-    else if(filtro!=='todos'){
-      try{ const snap=await db.collection('checklists').where('statusChecklist','==',filtro).limit(qtd).get(); res=snap.docs.map(d=>({id:d.id,_col:'checklists',...d.data()})); }
-      catch(_){ const snap=await db.collection('checklists').limit(Math.max(qtd,50)).get(); res=snap.docs.map(d=>({id:d.id,_col:'checklists',...d.data()})); }
-    } else { const snap=await db.collection('checklists').limit(qtd).get(); res=snap.docs.map(d=>({id:d.id,_col:'checklists',...d.data()})); }
-    const resp=norm($('consultaResp')?.value||''); if(resp) res=res.filter(x=>norm(x.responsavel||'').includes(resp));
+  stopConsultaRealtime();
+  go('screenConsulta'); setBusy('btnRodarConsulta',true,'Conectando...');
+  const db=activeDb(); const placa=placaNorm($('consultaPlaca')?.value||''); const qtd=Number($('consultaQtd')?.value||20); const filtro=$('consultaStatus')?.value||'todos';
+  const applyRows=(rows)=>{
+    let res=rows||[];
+    const resp=norm($('consultaResp')?.value||''); if(resp) res=res.filter(x=>norm(x.responsavel||x.tecnicoChecklist||'').includes(resp));
     if(filtro!=='todos') res=res.filter(x=>checklistStatusOf(x)===filtro);
-    res.sort((a,b)=>new Date(b.atualizadoEm||b.criadoEm||b.createdAt||0)-new Date(a.atualizadoEm||a.criadoEm||a.createdAt||0));
-    state.consulta=res.slice(0,qtd); renderConsulta();
-  }catch(e){ console.warn(e); $('consultaLista').innerHTML='<div class="notice bad">Consulta bloqueada pelo Firebase ou sem índice. Pesquise por placa.</div>'; }
-  finally{ setBusy('btnRodarConsulta',false); }
+    res.sort((a,b)=>toMs(b.liveAt||b.liveAtIso||b.atualizadoEm||b.criadoEm||b.createdAt)-toMs(a.liveAt||a.liveAtIso||a.atualizadoEm||a.criadoEm||a.createdAt));
+    state.consulta=res.slice(0,qtd); renderConsulta(); setBusy('btnRodarConsulta',false);
+  };
+  try{
+    let query=db.collection('checklists');
+    if(placa) query=query.where('placa','==',placa).limit(Math.max(qtd,50));
+    else if(filtro!=='todos') query=query.where('statusChecklist','==',filtro).limit(Math.max(qtd,80));
+    else query=query.limit(Math.max(qtd,80));
+    state.consultaUnsub=query.onSnapshot(
+      snap=>applyRows(snap.docs.map(d=>({id:d.id,_col:'checklists',...d.data()}))),
+      async err=>{
+        console.warn('consulta realtime',err); stopConsultaRealtime();
+        try{
+          const snap=placa?await db.collection('checklists').where('placa','==',placa).limit(Math.max(qtd,50)).get():await db.collection('checklists').limit(Math.max(qtd,80)).get();
+          applyRows(snap.docs.map(d=>({id:d.id,_col:'checklists',...d.data()})));
+          toast('Tempo real indisponível nesta consulta; exibindo a última leitura.');
+        }catch(e){ console.warn(e); $('consultaLista').innerHTML='<div class="notice bad">Consulta bloqueada pelo Firebase. Confira as regras/índices.</div>'; setBusy('btnRodarConsulta',false); }
+      }
+    );
+  }catch(e){ console.warn(e); $('consultaLista').innerHTML='<div class="notice bad">Não foi possível iniciar a consulta em tempo real.</div>'; setBusy('btnRodarConsulta',false); }
 }
+
 function renderConsulta(){
   const box=$('consultaLista'); if(!box) return;
   if(!state.consulta.length){ box.innerHTML='<div class="notice warn">Nenhum checklist encontrado com estes filtros.</div>'; return; }
-  box.innerHTML=state.consulta.map(c=>{ const st=checklistStatusOf(c); const pct=checklistProgress(c); const pending=onlyFinite(c.stats?.pending??c.itensPendentes); return `<div class="hist"><b>${esc(c.placa||'-')} • ${esc(c.osRef||'sem O.S.')} <span class="pill ${st==='concluido'?'ok':'warn'}">${esc(checklistStatusLabel(c))}</span></b><small>Atualizado: ${fmtDateTime(c.atualizadoEm||c.criadoEm||c.createdAt)} • ${esc(c.responsavel||'')} • ${pct}% • ${pending} pendente(s)</small><div class="badges"><span class="pill ok">OK ${onlyFinite(c.stats?.ok)}</span><span class="pill warn">Atenção ${onlyFinite(c.stats?.atencao)}</span><span class="pill bad">Trocar ${onlyFinite(c.stats?.trocar)}</span></div><div class="actions"><button class="btn ${st==='em_producao'?'warn':'secondary'} small" data-load-check="${esc(c.id)}" type="button">${st==='em_producao'?'▶ Continuar':'✏️ Editar'}</button><button class="btn secondary small" data-pdf-team-check="${esc(c.id)}" type="button">📄 PDF equipe</button><button class="btn secondary small" data-pdf-check="${esc(c.id)}" type="button">📋 PDF técnico</button>${isGestor()?`<button class="btn bad small" data-del-check="${esc(c.id)}" data-col="checklists" type="button">🗑️ Excluir</button>`:''}</div></div>`; }).join('');
+  box.innerHTML=state.consulta.map(c=>{
+    const st=checklistStatusOf(c); const pct=checklistProgress(c); const pending=onlyFinite(c.stats?.pending??c.itensPendentes);
+    const liveMs=toMs(c.liveAt||c.liveAtIso||c.atualizadoEm); const recent=liveMs>0 && (Date.now()-liveMs)<120000;
+    const liveBadge=st==='em_producao'?'<span class="pill '+(recent?'ok':'warn')+'">'+(recent?'● ATIVO AGORA':'☁ TEMPO REAL')+'</span>':'';
+    const watcher=(st==='em_producao'&&isGestor())?'<button class="btn ok small" data-live-check="'+esc(c.id)+'" type="button">👁 Acompanhar ao vivo</button>':'';
+    const editLabel=st==='em_producao'?'▶ Continuar':'✏️ Editar';
+    return '<div class="hist"><b>'+esc(c.placa||'-')+' • '+esc(c.osRef||'sem O.S.')+' <span class="pill '+(st==='concluido'?'ok':'warn')+'">'+esc(checklistStatusLabel(c))+'</span> '+liveBadge+'</b><small>Atualizado: '+fmtDateTime(c.liveAt||c.liveAtIso||c.atualizadoEm||c.criadoEm||c.createdAt)+' • '+esc(c.liveBy||c.responsavel||'')+' • '+pct+'% • '+pending+' pendente(s)</small><div class="badges"><span class="pill ok">OK '+onlyFinite(c.stats?.ok)+'</span><span class="pill warn">Atenção '+onlyFinite(c.stats?.atencao)+'</span><span class="pill bad">Trocar '+onlyFinite(c.stats?.trocar)+'</span></div><div class="actions">'+watcher+'<button class="btn '+(st==='em_producao'?'warn':'secondary')+' small" data-load-check="'+esc(c.id)+'" type="button">'+editLabel+'</button><button class="btn secondary small" data-pdf-team-check="'+esc(c.id)+'" type="button">📄 PDF equipe</button><button class="btn secondary small" data-pdf-check="'+esc(c.id)+'" type="button">📋 PDF técnico</button>'+(isGestor()?'<button class="btn bad small" data-del-check="'+esc(c.id)+'" data-col="checklists" type="button">🗑️ Excluir</button>':'')+'</div></div>';
+  }).join('');
   $$('[data-del-check]',box).forEach(b=>b.addEventListener('click',()=>deleteChecklist(b.dataset.col,b.dataset.delCheck)));
   $$('[data-load-check]',box).forEach(b=>b.addEventListener('click',()=>loadChecklistFromConsulta(b.dataset.loadCheck)));
-  $$('[data-pdf-team-check]',box).forEach(b=>b.addEventListener('click',()=>{ const c=state.consulta.find(x=>x.id===b.dataset.pdfTeamCheck); if(c) gerarPDFEquipe(c); }));
-  $$('[data-pdf-check]',box).forEach(b=>b.addEventListener('click',()=>{ const c=state.consulta.find(x=>x.id===b.dataset.pdfCheck); if(c) gerarPDF(c); }));
+  $$('[data-live-check]',box).forEach(b=>b.addEventListener('click',()=>startLiveChecklistFromConsulta(b.dataset.liveCheck)));
+  $$('[data-pdf-team-check]',box).forEach(b=>b.addEventListener('click',()=>{ const row=state.consulta.find(x=>x.id===b.dataset.pdfTeamCheck); if(row) gerarPDFEquipe(row); }));
+  $$('[data-pdf-check]',box).forEach(b=>b.addEventListener('click',()=>{ const row=state.consulta.find(x=>x.id===b.dataset.pdfCheck); if(row) gerarPDF(row); }));
 }
-function hydrateChecklistForEdit(c){
+
+function hydrateChecklistForEdit(c,opts={}){
   if(!c) return;
+  const keepSection=opts.preserveSection?state.activeSection:'';
+  state.liveMonitor=!!opts.liveMonitor;
   state.lastSavedId=c.id||''; state.currentCreatedAt=c.criadoEm||c.createdAt||''; state.currentFinalizedAt=c.finalizadoEm||'';
+  state.liveLastUpdate=c.liveAt||c.liveAtIso||c.atualizadoEm||''; state.liveLastBy=c.liveBy||c.responsavel||'';
   state.answers={};
-  (c.itens||[]).forEach(i=>{
-    const id=i.id || i.checklistItemId || i.itemId;
-    if(id) state.answers[id]={...i,id};
-  });
+  (c.itens||[]).forEach(i=>{ const id=i.id||i.checklistItemId||i.itemId; if(id) state.answers[id]={...i,id}; });
   state.itemPhotos=c.itemPhotos||c.itemFotos||{}; state.generalPhotos=c.fotoUrls||c.fotosGeraisUrls||[];
   $('placa').value=c.placa||'';
   $('osRef').value=c.osRef||c.osNumero||''; state.osSelecionada=c.osId?{id:c.osId,_col:c.osColecao||'ordens_servico',numero:c.osNumero||c.osRef,label:c.osLabel||c.osNumero||c.osRef,status:c.osStatus||'',clienteNome:c.osCliente||'',veiculoLabel:c.osVeiculo||''}:null;
@@ -955,17 +978,40 @@ function hydrateChecklistForEdit(c){
   if($('tecnicoChecklist')) $('tecnicoChecklist').value=c.tecnicoChecklist||c.tecnicoNome||c.responsavel||state.session?.name||'';
   if($('verificadorEntrega')) $('verificadorEntrega').value=c.verificadorEntrega||state.session?.name||'';
   if($('conferente')) $('conferente').value=c.verificadorEntrega||state.session?.name||'';
-  $('relato').value=c.relato||'';
-  $('diagnostico').value=c.diagnostico||'';
-  const pend=firstPendingItem(); if(pend) state.activeSection=pend.sec.id; else { const firstId=Object.keys(state.answers)[0]||''; state.activeSection=itemMap()[firstId]?.secaoId||state.model?.secoes?.[0]?.id||state.activeSection; }
-  saveDraft(); renderAll(); renderResumo(); go('screenChecklist');
-  toast(pend?`Checklist em produção aberto. Continue em ${pend.sec.titulo}.`:'Checklist concluído aberto para edição.');
+  $('relato').value=c.relato||''; $('diagnostico').value=c.diagnostico||'';
+  if(keepSection && (state.model?.secoes||[]).some(s=>s.id===keepSection)) state.activeSection=keepSection;
+  else { const pend=firstPendingItem(); if(pend) state.activeSection=pend.sec.id; else { const firstId=Object.keys(state.answers)[0]||''; state.activeSection=itemMap()[firstId]?.secaoId||state.model?.secoes?.[0]?.id||state.activeSection; } }
+  state.lastAutosaveSignature=realtimeSignature(c);
+  if(!state.liveMonitor) saveDraft(false);
+  renderAll(); renderResumo();
+  if(opts.navigate!==false) go('screenChecklist');
+  if(!opts.silent){ const pend=firstPendingItem(); toast(state.liveMonitor?'🔴 Acompanhamento ao vivo iniciado.':(pend?('Checklist em produção aberto. Continue em '+pend.sec.titulo+'.'):'Checklist concluído aberto para edição.')); }
 }
+
 function loadChecklistFromConsulta(id){ loadChecklistFromList(state.consulta,id); }
 function loadChecklistFromList(list,id){
-  const c=(list||[]).find(x=>x.id===id);
-  if(!c) return toast('Checklist não encontrado nesta lista.');
-  hydrateChecklistForEdit(c);
+  const row=(list||[]).find(x=>x.id===id);
+  if(!row) return toast('Checklist não encontrado nesta lista.');
+  stopLiveChecklist(); state.liveMonitor=false;
+  hydrateChecklistForEdit(row,{liveMonitor:false,navigate:true});
+}
+function startLiveChecklistFromConsulta(id){
+  if(!isGestor()) return loadChecklistFromConsulta(id);
+  stopConsultaRealtime(); stopLiveChecklist();
+  state.liveMonitor=true; state.liveDocId=id; state.liveLoaded=false;
+  const ref=activeDb().collection('checklists').doc(id);
+  state.liveUnsub=ref.onSnapshot(snap=>{
+    if(!snap.exists){ toast('Este checklist foi removido.'); stopLiveChecklist(); go('screenInicio'); return; }
+    const data={id:snap.id,_col:'checklists',...snap.data()};
+    const first=!state.liveLoaded;
+    state.remoteApplying=true;
+    try{
+      state.liveMonitor=true; state.liveDocId=id;
+      hydrateChecklistForEdit(data,{liveMonitor:true,navigate:first,preserveSection:!first,silent:!first});
+      state.liveLoaded=true; state.liveLastUpdate=data.liveAt||data.liveAtIso||data.atualizadoEm||''; state.liveLastBy=data.liveBy||data.responsavel||'';
+      renderWorkStatus();
+    }finally{ state.remoteApplying=false; }
+  },e=>{ console.warn('live checklist',e); toast('Não foi possível acompanhar este checklist em tempo real.'); stopLiveChecklist(); go('screenConsulta'); });
 }
 
 function getCriticalItems(){ return payloadBase().itens.filter(i=>ACTIONS_FINAL.has(i.acao)); }
