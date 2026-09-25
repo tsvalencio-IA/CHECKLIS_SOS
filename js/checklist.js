@@ -40,6 +40,20 @@ const state = {
   lastQuoteData:null,
   lastResumoCriticos:[],
   focusItemId:'',
+  consultaUnsub:null,
+  liveUnsub:null,
+  liveDocId:'',
+  liveMonitor:false,
+  liveLoaded:false,
+  remoteApplying:false,
+  autosaveTimer:null,
+  autosaveWriting:false,
+  autosaveQueued:false,
+  lastAutosaveSignature:'',
+  lastLiveSavedAt:'',
+  liveLastUpdate:'',
+  liveLastBy:'',
+  dictation:null,
   theme: localStorage.getItem(THEME_KEY) || 'light'
 };
 
@@ -57,6 +71,62 @@ function hideErr(){ $('loginErro')?.classList.add('hidden'); }
 function setBusy(id,busy,label){ const b=$(id); if(!b) return; if(busy){ b.dataset.old=b.textContent; b.textContent=label||'Aguarde...'; b.disabled=true; } else { b.disabled=false; if(b.dataset.old) b.textContent=b.dataset.old; } }
 function downloadText(name, text, type='application/json;charset=utf-8'){ const blob=new Blob([text],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
 function onlyFinite(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+
+function toMs(v){ try{ if(!v) return 0; if(typeof v.toDate==='function') return v.toDate().getTime(); if(typeof v==='number') return v; const n=Date.parse(v); return Number.isFinite(n)?n:0; }catch(e){ return 0; } }
+function remoteUrls(arr){ return (Array.isArray(arr)?arr:[]).filter(v=>typeof v==='string' && v && !/^data:|^blob:/i.test(v)); }
+function sanitizeRealtimePayload(input){
+  const p={...(input||{})};
+  p.fotoUrls=remoteUrls(p.fotoUrls); p.fotosGeraisUrls=remoteUrls(p.fotosGeraisUrls);
+  const src=p.itemPhotos||p.itemFotos||{}; const clean={};
+  Object.entries(src).forEach(([id,arr])=>{ const urls=remoteUrls(arr); if(urls.length) clean[id]=urls; });
+  p.itemPhotos=clean; p.itemFotos=clean;
+  p.itens=(p.itens||[]).map(i=>{ const urls=remoteUrls(i.fotoUrls||i.fotosUrls); return {...i,fotoUrls:urls,fotosUrls:urls,fotos:urls.length}; });
+  return p;
+}
+function realtimeSignature(p){
+  return JSON.stringify({
+    placa:p?.placa||'',osRef:p?.osRef||'',osId:p?.osId||'',km:p?.km||'',
+    tecnico:p?.tecnicoChecklist||p?.responsavel||'',verificador:p?.verificadorEntrega||'',
+    relato:p?.relato||'',diagnostico:p?.diagnostico||'',status:p?.statusChecklist||'',
+    itens:(p?.itens||[]).map(i=>({id:i.id||'',acao:i.acao||'',obs:i.obs||'',obsPorVoz:!!i.obsPorVoz,obsVozEm:i.obsVozEm||'',updatedAt:i.updatedAt||'',updatedBy:i.updatedBy||''}))
+  });
+}
+function stopConsultaRealtime(){ if(typeof state.consultaUnsub==='function'){ try{ state.consultaUnsub(); }catch(e){} } state.consultaUnsub=null; }
+function stopLiveChecklist(){
+  if(typeof state.liveUnsub==='function'){ try{ state.liveUnsub(); }catch(e){} }
+  state.liveUnsub=null; state.liveDocId=''; state.liveMonitor=false; state.liveLoaded=false; state.liveLastUpdate=''; state.liveLastBy='';
+}
+function scheduleRealtimeAutosave(delay=650){
+  if(state.remoteApplying || state.liveMonitor || state.autosaveWriting) return;
+  if(!sessionOk(state.session||loadSession(false))) return;
+  if(placaNorm($('placa')?.value||'').length!==7) return;
+  clearTimeout(state.autosaveTimer);
+  state.autosaveTimer=setTimeout(()=>autosaveRealtime(),Math.max(250,Number(delay)||650));
+}
+async function autosaveRealtime(){
+  if(state.remoteApplying || state.liveMonitor || !sessionOk(state.session||loadSession(false))) return;
+  if(placaNorm($('placa')?.value||'').length!==7) return;
+  if(state.autosaveWriting){ state.autosaveQueued=true; return; }
+  const p=sanitizeRealtimePayload(payloadBase());
+  const sig=realtimeSignature(p);
+  if(sig===state.lastAutosaveSignature) return;
+  state.autosaveWriting=true; state.autosaveQueued=false;
+  try{
+    const db=activeDb();
+    if(!state.lastSavedId){ const ref=db.collection('checklists').doc(); state.lastSavedId=ref.id; }
+    p.id=state.lastSavedId; p.syncTempoReal=true; p.liveAtIso=nowISO(); p.liveBy=state.session?.name||''; p.liveRole=state.session?.role||'';
+    const fv=window.firebase?.firestore?.FieldValue;
+    const write={...p,liveAt:fv?.serverTimestamp?fv.serverTimestamp():p.liveAtIso};
+    await db.collection('checklists').doc(state.lastSavedId).set(write,{merge:true});
+    state.currentCreatedAt=p.criadoEm||state.currentCreatedAt||nowISO();
+    state.lastAutosaveSignature=sig; state.lastLiveSavedAt=p.liveAtIso;
+    saveDraft(false); renderWorkStatus();
+  }catch(e){ console.warn('[Checklist tempo real]',e); }
+  finally{
+    state.autosaveWriting=false;
+    if(state.autosaveQueued){ state.autosaveQueued=false; scheduleRealtimeAutosave(250); }
+  }
+}
 
 function applyTheme(){ document.documentElement.dataset.theme = state.theme; localStorage.setItem(THEME_KEY,state.theme); }
 function applyBrand(brand={}){
