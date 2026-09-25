@@ -64,6 +64,24 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Validate source
+        run: |
+          node --check js/checklist.js
+          node --check js/config.js
+          node - <<'NODE'
+          const fs=require('fs');
+          const model=JSON.parse(fs.readFileSync('data/checklist-model.json','utf8'));
+          const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+          const total=(model.secoes||[]).reduce((n,s)=>n+(s.itens||[]).length,0);
+          if(total < 160) throw new Error('Modelo do checklist incompleto: '+total+' itens');
+          const js=fs.readFileSync('js/checklist.js','utf8');
+          for(const req of ['autosaveRealtime','startLiveChecklistFromConsulta','Falar observação','obsPorVoz','SAAS-2']){
+            if(!js.includes(req)) throw new Error('Recurso V15.22 ausente: '+req);
+          }
+          if(!pkg.dependencies?.['@capacitor-community/speech-recognition']) throw new Error('Plugin nativo de voz ausente.');
+          console.log('Validação OK •', total, 'itens • tempo real + voz presentes');
+          NODE
+
       - name: Prepare web bundle
         run: |
           node - <<'NODE'
