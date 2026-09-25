@@ -183,7 +183,7 @@ function saveSession(sess, remember){
   localStorage.setItem('OFICINIA_CHECKLIST_V15_LAST_USER', clean.login || clean.email || '');
   state.session=clean; state.dbActive=null; applySessionUi();
 }
-function clearSession(){ sessionStorage.removeItem(SESSION_KEY); localStorage.removeItem(SESSION_KEY); state.session=null; state.dbActive=null; state.answers={}; state.delivery={}; saveDraft(); applySessionUi(); go('screenLogin'); }
+function clearSession(){ stopLiveChecklist(); stopConsultaRealtime(); clearTimeout(state.autosaveTimer); sessionStorage.removeItem(SESSION_KEY); localStorage.removeItem(SESSION_KEY); state.session=null; state.dbActive=null; state.answers={}; state.delivery={}; state.lastAutosaveSignature=''; saveDraft(false); applySessionUi(); go('screenLogin'); }
 function applySessionUi(){
   const s=state.session;
   $('sessPill').textContent = s ? `✅ ${s.name} • ${s.role}` : '🔒 Bloqueado';
@@ -467,9 +467,10 @@ function renderQuoteGroup(title, groups, empty, kind='geral'){
   }).join('')}</div>`;
 }
 
-function saveDraft(){
+function saveDraft(schedule=true){
   const draft={answers:state.answers,itemPhotos:state.itemPhotos,generalPhotos:state.generalPhotos,delivery:state.delivery,placa:$('placa')?.value||'',osRef:$('osRef')?.value||'',osSelecionada:state.osSelecionada||null,km:$('km')?.value||'',tecnicoChecklist:$('tecnicoChecklist')?.value||'',verificadorEntrega:$('verificadorEntrega')?.value||'',entregaEntreguePor:$('entregaEntreguePor')?.value||'',entregaRecebidoPor:$('entregaRecebidoPor')?.value||'',entregaDoc:$('entregaDoc')?.value||'',entregaData:$('entregaData')?.value||'',conferente:$('conferente')?.value||'',entregaStatus:$('entregaStatus')?.value||'',entregaObs:$('entregaObs')?.value||'',relato:$('relato')?.value||'',diagnostico:$('diagnostico')?.value||'',activeSection:state.activeSection,audioUrl:state.audioUrl,lastSavedId:state.lastSavedId||'',currentCreatedAt:state.currentCreatedAt||'',currentFinalizedAt:state.currentFinalizedAt||''};
   localStorage.setItem(DRAFT_KEY,JSON.stringify(draft));
+  if(schedule && !state.remoteApplying && !state.liveMonitor) scheduleRealtimeAutosave();
 }
 function restoreDraft(){
   try{
@@ -478,7 +479,7 @@ function restoreDraft(){
     if($('placa')) $('placa').value=d.placa||''; if($('osRef')) $('osRef').value=d.osRef||''; if($('km')) $('km').value=d.km||''; if($('tecnicoChecklist')) $('tecnicoChecklist').value=d.tecnicoChecklist||state.session?.name||''; if($('verificadorEntrega')) $('verificadorEntrega').value=d.verificadorEntrega||state.session?.name||''; if($('conferente')) $('conferente').value=d.conferente||d.verificadorEntrega||state.session?.name||''; if($('entregaEntreguePor')) $('entregaEntreguePor').value=d.entregaEntreguePor||''; if($('entregaRecebidoPor')) $('entregaRecebidoPor').value=d.entregaRecebidoPor||''; if($('entregaDoc')) $('entregaDoc').value=d.entregaDoc||''; if($('entregaData')) $('entregaData').value=d.entregaData||''; if($('entregaStatus') && d.entregaStatus) $('entregaStatus').value=d.entregaStatus; if($('entregaObs')) $('entregaObs').value=d.entregaObs||''; if($('relato')) $('relato').value=d.relato||''; if($('diagnostico')) $('diagnostico').value=d.diagnostico||'';
   }catch(e){}
 }
-function clearDraft(){ localStorage.removeItem(DRAFT_KEY); state.answers={}; state.itemPhotos={}; state.generalPhotos=[]; state.delivery={}; state.history={os:[],checklists:[],entregas:[]}; state.osSelecionada=null; state.lastSavedId=''; state.currentCreatedAt=''; state.currentFinalizedAt=''; ['placa','osRef','km','tecnicoChecklist','verificadorEntrega','entregaEntreguePor','entregaRecebidoPor','entregaDoc','entregaData','relato','diagnostico','entregaObs'].forEach(id=>{ if($(id)) $(id).value=''; }); if($('responsavel')) $('responsavel').value=state.session?.name||''; if($('tecnicoChecklist')) $('tecnicoChecklist').value=state.session?.name||''; if($('verificadorEntrega')) $('verificadorEntrega').value=state.session?.name||''; if($('conferente')) $('conferente').value=state.session?.name||''; renderAll(); }
+function clearDraft(){ stopLiveChecklist(); clearTimeout(state.autosaveTimer); localStorage.removeItem(DRAFT_KEY); state.answers={}; state.itemPhotos={}; state.generalPhotos=[]; state.delivery={}; state.history={os:[],checklists:[],entregas:[]}; state.osSelecionada=null; state.lastSavedId=''; state.currentCreatedAt=''; state.currentFinalizedAt=''; state.lastAutosaveSignature=''; state.lastLiveSavedAt=''; ['placa','osRef','km','tecnicoChecklist','verificadorEntrega','entregaEntreguePor','entregaRecebidoPor','entregaDoc','entregaData','relato','diagnostico','entregaObs'].forEach(id=>{ if($(id)) $(id).value=''; }); if($('responsavel')) $('responsavel').value=state.session?.name||''; if($('tecnicoChecklist')) $('tecnicoChecklist').value=state.session?.name||''; if($('verificadorEntrega')) $('verificadorEntrega').value=state.session?.name||''; if($('conferente')) $('conferente').value=state.session?.name||''; renderAll(); }
 function startNewChecklist(){
   const hasWork=!!(placaNorm($('placa')?.value||'') || Object.keys(state.answers||{}).length || state.lastSavedId);
   if(hasWork && !confirm('Iniciar um novo checklist? O checklist já salvo não será apagado. Alterações que ainda não foram salvas no Firebase serão descartadas.')) return;
@@ -490,6 +491,8 @@ function startNewChecklist(){
 
 function go(screen){
   if(screen!=='screenLogin' && !sessionOk(state.session||loadSession(false))) screen='screenLogin';
+  if(screen!=='screenConsulta') stopConsultaRealtime();
+  if(state.liveMonitor && !['screenChecklist','screenMidia','screenResumo'].includes(screen)) stopLiveChecklist();
   state.screen=screen;
   ['screenLogin','screenInicio','screenConsulta','screenChecklist','screenMidia','screenResumo','screenEntrega'].forEach(id=>$(id)?.classList.add('hidden'));
   $(screen)?.classList.remove('hidden');
@@ -541,9 +544,22 @@ function irParaInicio(){
 
 function renderWorkStatus(){
   const st=stats(); const plate=placaNorm($('placa')?.value||''); const status=st.pending===0&&st.percent===100?'concluido':'em_producao';
-  if($('draftPill')){ $('draftPill').textContent=state.lastSavedId?(status==='concluido'?`✅ Salvo • ${st.percent}%`:`🔧 Em produção • ${st.percent}%`):`Rascunho local • ${st.percent}%`; $('draftPill').className='pill '+(status==='concluido'?'ok':state.lastSavedId?'warn':''); }
-  if($('currentWorkInfo')) $('currentWorkInfo').innerHTML=plate?`<b>${state.lastSavedId?'Checklist salvo':'Rascunho atual'}:</b> ${esc(plate)} • ${st.percent}% preenchido • ${st.pending} pendente(s). ${state.lastSavedId?`ID ${esc(state.lastSavedId)}.`:'Use <b>Salvar agora</b> para registrar no Firebase.'}`:'Comece pela placa. Você pode salvar no Firebase em qualquer etapa e continuar depois em <b>Em produção</b>.';
-  if($('btnSaveNow')) $('btnSaveNow').textContent=state.lastSavedId?'💾 Salvar alterações':'💾 Salvar agora';
+  if(state.liveMonitor){
+    if($('draftPill')){ $('draftPill').textContent='🔴 AO VIVO • '+st.percent+'%'; $('draftPill').className='pill warn'; }
+    if($('currentWorkInfo')){
+      const by=state.liveLastBy?(' Última alteração por <b>'+esc(state.liveLastBy)+'</b>.'):'';
+      $('currentWorkInfo').innerHTML='<b>🔴 Acompanhamento ao vivo:</b> '+esc(plate||'-')+' • '+st.percent+'% preenchido • '+st.pending+' pendente(s).'+by+' Esta tela recebe as alterações do mecânico automaticamente.';
+    }
+    if($('btnSaveNow')){ $('btnSaveNow').textContent='🔴 Visualização ao vivo'; $('btnSaveNow').disabled=true; }
+    return;
+  }
+  if($('draftPill')){ $('draftPill').textContent=state.lastSavedId?(status==='concluido'?('✅ Salvo • '+st.percent+'%'):('☁️ Tempo real • '+st.percent+'%')):('Rascunho local • '+st.percent+'%'); $('draftPill').className='pill '+(status==='concluido'?'ok':state.lastSavedId?'warn':''); }
+  if($('currentWorkInfo')){
+    if(plate){
+      $('currentWorkInfo').innerHTML='<b>'+(state.lastSavedId?'Checklist sincronizado':'Rascunho atual')+':</b> '+esc(plate)+' • '+st.percent+'% preenchido • '+st.pending+' pendente(s). '+(state.lastSavedId?('Sincronização automática em tempo real ativa • ID '+esc(state.lastSavedId)+'.'):'Ao informar a placa completa, o sistema passa a salvar automaticamente no Firebase.');
+    }else $('currentWorkInfo').innerHTML='Comece pela placa. Com a placa completa, as alterações passam a ser gravadas automaticamente em tempo real.';
+  }
+  if($('btnSaveNow')){ $('btnSaveNow').disabled=false; $('btnSaveNow').textContent=state.lastSavedId?'💾 Salvar alterações':'💾 Salvar agora'; }
 }
 function renderAll(){ renderSymptoms(); renderSections(); renderProgress(); renderPhotos(); renderDelivery(); renderOSSelecionadaInfo(); renderWorkStatus(); }
 
