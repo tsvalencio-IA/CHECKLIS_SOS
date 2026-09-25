@@ -1,7 +1,7 @@
 'use strict';
 
 window.CHECKLIST_APP = {
-  version: '15.23.1',
+  version: '15.23.2',
   appName: 'OFICIN-IA Checklist',
   appId: 'br.com.thiaguinhosolucoes.oficinia.checklist.v15githubpages',
   footer: 'Powered by thIAguinho Soluções Digitais',

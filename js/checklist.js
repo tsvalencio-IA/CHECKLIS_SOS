@@ -416,7 +416,7 @@ function modelLooksCompatible(model){
 }
 async function loadModel(tryRemote=false){
   let base=null; let model=null;
-  try{ const res=await fetch('./data/checklist-model.json?v=15.23.1',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
+  try{ const res=await fetch('./data/checklist-model.json?v=15.23.2',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
   try{ const saved=safeJson(localStorage.getItem(modelStorageKey()))||safeJson(localStorage.getItem(MODEL_KEY)); if(modelLooksCompatible(saved)) model=mergeEvolutionModel(base,saved); }catch(e){ console.warn('modelo local legado ignorado',e); }
   if(tryRemote && state.session){
     try{
@@ -894,7 +894,7 @@ function payloadBase(){
   const st=stats(); const ts=nowISO(); const statusChecklist=st.pending===0&&st.percent===100?'concluido':'em_producao';
   const criadoEm=state.currentCreatedAt||ts;
   const finalizadoEm=statusChecklist==='concluido'?(state.currentFinalizedAt||ts):'';
-  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-23-1', versao:'v15.23.1', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
+  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-23-2', versao:'v15.23.2', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
 }
 async function saveChecklist(){
   if(state.liveMonitor){ toast('Acompanhamento ao vivo é somente leitura. Abra em Editar para salvar alterações.'); return null; }
@@ -1135,6 +1135,59 @@ function normalizeSavedChecklistForReport(raw){
   normalized.statusChecklist=checklistStatusOf(normalized);
   return normalized;
 }
+function isNativeCapacitor(){
+  try{ return !!(window.Capacitor?.isNativePlatform?.()); }catch(e){ return false; }
+}
+function openPdfPreview(label='PDF'){
+  if(isNativeCapacitor()) return null;
+  try{
+    const w=window.open('about:blank','_blank');
+    if(w){ w.document.title='Gerando '+label+'...'; w.document.body.innerHTML='<div style="font-family:Arial,sans-serif;padding:24px">Gerando PDF...</div>'; }
+    return w;
+  }catch(e){ return null; }
+}
+function blobToBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const fr=new FileReader();
+    fr.onload=()=>resolve(String(fr.result||'').split(',')[1]||'');
+    fr.onerror=()=>reject(fr.error||new Error('Falha ao converter PDF.'));
+    fr.readAsDataURL(blob);
+  });
+}
+function triggerPdfDownload(blob,fileName){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=fileName||'checklist.pdf'; a.style.display='none';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),120000);
+}
+function renderPdfPreview(win,blob,fileName){
+  if(!win || win.closed) return false;
+  const url=URL.createObjectURL(blob);
+  try{
+    const d=win.document; d.open(); d.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF</title></head><body style="margin:0;font-family:Arial,sans-serif;background:#111827;color:white"><div id="bar" style="height:52px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#0f172a;box-sizing:border-box"><strong style="flex:1">PDF gerado</strong></div><iframe id="pdf" style="border:0;width:100%;height:calc(100vh - 52px);background:white"></iframe></body></html>'); d.close();
+    const bar=d.getElementById('bar'),frame=d.getElementById('pdf');
+    const link=d.createElement('a'); link.textContent='Baixar PDF'; link.href=url; link.download=fileName||'checklist.pdf'; link.style.cssText='background:#2563eb;color:white;padding:9px 12px;border-radius:8px;text-decoration:none;font-weight:700';
+    bar.appendChild(link); frame.src=url; setTimeout(()=>URL.revokeObjectURL(url),300000); return true;
+  }catch(e){ try{ win.location.href=url; return true; }catch(_){ URL.revokeObjectURL(url); return false; } }
+}
+async function entregarPdfGerado(out,preview,label='PDF'){
+  if(!out?.blob) throw new Error('PDF não retornou arquivo para entrega.');
+  const fileName=out.fileName||'checklist.pdf';
+  if(isNativeCapacitor()){
+    try{
+      const Filesystem=window.Capacitor?.Plugins?.Filesystem, Share=window.Capacitor?.Plugins?.Share;
+      if(Filesystem && Share){
+        const data=await blobToBase64(out.blob);
+        const saved=await Filesystem.writeFile({path:fileName,data,directory:'CACHE',recursive:true});
+        await Share.share({title:fileName,text:label,url:saved.uri,files:[saved.uri],dialogTitle:'Abrir, salvar ou enviar PDF'});
+        return 'native-share';
+      }
+    }catch(e){ console.warn('[PDF nativo] fallback web',e); }
+  }
+  const shown=renderPdfPreview(preview,out.blob,fileName);
+  triggerPdfDownload(out.blob,fileName);
+  return shown?'preview-download':'download';
+}
 async function latestSavedChecklist(id,fallback){
   if(!id) return normalizeSavedChecklistForReport(fallback||{});
   try{
@@ -1145,16 +1198,18 @@ async function latestSavedChecklist(id,fallback){
 }
 async function gerarPdfSalvo(kind,id,list,button){
   const fallback=(list||[]).find(x=>String(x.id)===String(id))||null;
-  const original=button?.textContent||'';
+  const original=button?.textContent||''; const label=kind==='equipe'?'PDF da equipe':'PDF técnico';
+  const preview=openPdfPreview(label);
   if(button){ button.disabled=true; button.textContent='⏳ Gerando...'; }
   try{
     const data=await latestSavedChecklist(id,fallback);
     if(!data?.id && !data?.placa && !(data?.itens||[]).length) throw new Error('Checklist salvo não encontrado.');
-    toast(kind==='equipe'?'Gerando PDF da equipe...':'Gerando PDF técnico...');
-    if(kind==='equipe') await gerarPDFEquipe(data);
-    else await gerarPDF(data);
-    toast(kind==='equipe'?'PDF da equipe gerado.':'PDF técnico gerado.');
+    toast('Gerando '+label+'...');
+    const out=kind==='equipe' ? await gerarPDFEquipe(data,'blob') : await gerarPDF(data,'blob');
+    await entregarPdfGerado(out,preview,label);
+    toast(label+' pronto.');
   }catch(e){
+    try{ if(preview&&!preview.closed) preview.close(); }catch(_){}
     console.error('[PDF checklist salvo]',kind,id,e);
     toast('Não foi possível gerar este PDF. O erro foi registrado no console.');
   }finally{
@@ -1162,11 +1217,18 @@ async function gerarPdfSalvo(kind,id,list,button){
   }
 }
 async function executarPdfSeguro(label,fn,button){
-  const original=button?.textContent||'';
+  const original=button?.textContent||''; const preview=openPdfPreview(label);
   if(button){ button.disabled=true; button.textContent='⏳ Gerando...'; }
-  try{ toast('Gerando '+label+'...'); await fn(); toast(label+' gerado.'); }
-  catch(e){ console.error('[PDF]',label,e); toast('Falha ao gerar '+label+'. Verifique o console.'); }
-  finally{ if(button){ button.disabled=false; button.textContent=original; } }
+  try{
+    toast('Gerando '+label+'...');
+    const out=await fn();
+    if(out?.blob) await entregarPdfGerado(out,preview,label);
+    else if(preview&&!preview.closed) preview.close();
+    toast(label+' pronto.');
+  }catch(e){
+    try{ if(preview&&!preview.closed) preview.close(); }catch(_){}
+    console.error('[PDF]',label,e); toast('Falha ao gerar '+label+'. Verifique o console.');
+  }finally{ if(button){ button.disabled=false; button.textContent=original; } }
 }
 async function consultar(statusOverride=''){
   if(typeof statusOverride!=='string') statusOverride='';
@@ -1288,7 +1350,7 @@ function entregaPayloadBase(){
   const base=payloadBase();
   const itens=getCriticalItems().map(i=>({checklistItemId:i.id, item:i.item, secao:i.secao, acao:i.acao, acaoLabel:i.acaoLabel, diagnosticoObs:i.obs, fotos:i.fotos||0, fotoUrls:i.fotoUrls||[], entrega:state.delivery[i.id]||{status:'pendente'}}));
   const dataEntrega=($('entregaData')?.value||'').trim();
-  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-23-1', versao:'v15.23.1', registroEntrega:true};
+  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-23-2', versao:'v15.23.2', registroEntrega:true};
 }
 async function saveEntrega(){
   setBusy('btnSalvarEntrega',true,'Salvando entrega...');
@@ -1452,7 +1514,7 @@ async function compartilharPDFEquipe(source){
   }catch(e){ if(e?.name!=='AbortError'){ console.warn(e); toast('Não foi possível abrir o compartilhamento. Gere o PDF e anexe no WhatsApp.'); } }
 }
 
-async function gerarPDF(source){
+async function gerarPDF(source,mode='save'){
   const data=normalizeSavedChecklistForReport(source||payloadBase());
   const jsPDF=window.jspdf?.jsPDF; if(!jsPDF){ toast('Biblioteca PDF não carregou.'); return; }
   const doc=new jsPDF({unit:'mm',format:'a4'});
@@ -1493,7 +1555,10 @@ async function gerarPDF(source){
   }
   if(y+18>281) y=newPage(); doc.setDrawColor(148,163,184); doc.line(12,y+8,70,y+8); doc.line(78,y+8,136,y+8); doc.line(144,y+8,198,y+8); doc.setFont('helvetica','normal'); doc.setFontSize(6.2); doc.setTextColor(100,116,139); doc.text('Responsável técnico',41,y+12,{align:'center'}); doc.text('Gestor / conferente',107,y+12,{align:'center'}); doc.text('Cliente / recebimento',171,y+12,{align:'center'});
   const total=doc.internal.getNumberOfPages(); for(let n=1;n<=total;n++){ doc.setPage(n); footer(); }
-  doc.save(`${data.registroEntrega?'entrega':'checklist'}_${data.placa||'veiculo'}_${new Date().toISOString().slice(0,10)}.pdf`);
+  const fileName=`${data.registroEntrega?'entrega':'checklist'}_${data.placa||'veiculo'}_${new Date().toISOString().slice(0,10)}.pdf`;
+  const blob=doc.output('blob');
+  if(mode==='blob') return {blob,fileName,data,paginas:total};
+  doc.save(fileName); return {blob,fileName,data,paginas:total};
 }
 
 
@@ -1609,8 +1674,8 @@ function checklistResumoParaOS(data, entrega=false){
   return {
     id:data?.id||state.lastSavedId||uid(),
     tipo: entrega?'entrega':'tecnico',
-    app:data?.app||'OFICIN-IA-CHECKLIST-V15-23-1',
-    versao:data?.versao||'v15.23.1',
+    app:data?.app||'OFICIN-IA-CHECKLIST-V15-23-2',
+    versao:data?.versao||'v15.23.2',
     modeloVersao:data?.modeloVersao||state.model?.versao||'',
     placa:data?.placa||placaNorm($('placa')?.value||''),
     osRef:data?.osRef||($('osRef')?.value||'').trim(),
@@ -1857,7 +1922,7 @@ function bind(){
   $('btnFotoGeral')?.addEventListener('click',()=>openPhotoChoice(null)); $('btnFotoGeralResumo')?.addEventListener('click',()=>openPhotoChoice(null));
   $('btnFecharFoto')?.addEventListener('click',closePhotoChoice); $('fotoModalCamera')?.addEventListener('change',e=>handleModalPhotoFiles(e.target.files)); $('fotoModalGaleria')?.addEventListener('change',e=>handleModalPhotoFiles(e.target.files));
   $('btnDitarRelato')?.addEventListener('click',dictateRelato); $('btnAudio')?.addEventListener('click',toggleAudio);
-  $('btnSalvar')?.addEventListener('click',saveChecklist); $('btnPDFEquipe')?.addEventListener('click',e=>executarPdfSeguro('PDF da equipe',()=>gerarPDFEquipe(),e.currentTarget)); $('btnCompartilharPDF')?.addEventListener('click',()=>compartilharPDFEquipe()); $('btnPDF')?.addEventListener('click',e=>executarPdfSeguro('PDF de cotação',()=>gerarPDFCotacao(),e.currentTarget)); $('btnPDFTecnico')?.addEventListener('click',e=>executarPdfSeguro('PDF técnico',()=>gerarPDF(),e.currentTarget)); $('btnResumoRefresh')?.addEventListener('click',renderResumo); $('btnXLSX')?.addEventListener('click',()=>gerarXLSX('checklist')); $('btnA4')?.addEventListener('click',()=>printA4(false)); $('btnA4Topo')?.addEventListener('click',()=>printA4(false)); $('btnJSON')?.addEventListener('click',baixarJSON); $('btnAnexarOS')?.addEventListener('click',()=>anexarOS(false));
+  $('btnSalvar')?.addEventListener('click',saveChecklist); $('btnPDFEquipe')?.addEventListener('click',e=>executarPdfSeguro('PDF da equipe',()=>gerarPDFEquipe(undefined,'blob'),e.currentTarget)); $('btnCompartilharPDF')?.addEventListener('click',()=>compartilharPDFEquipe()); $('btnPDF')?.addEventListener('click',e=>executarPdfSeguro('PDF de cotação',()=>gerarPDFCotacao(),e.currentTarget)); $('btnPDFTecnico')?.addEventListener('click',e=>executarPdfSeguro('PDF técnico',()=>gerarPDF(undefined,'blob'),e.currentTarget)); $('btnResumoRefresh')?.addEventListener('click',renderResumo); $('btnXLSX')?.addEventListener('click',()=>gerarXLSX('checklist')); $('btnA4')?.addEventListener('click',()=>printA4(false)); $('btnA4Topo')?.addEventListener('click',()=>printA4(false)); $('btnJSON')?.addEventListener('click',baixarJSON); $('btnAnexarOS')?.addEventListener('click',()=>anexarOS(false));
   $('btnEditarAtual')?.addEventListener('click',()=>go('screenChecklist')); $('btnExcluirAtual')?.addEventListener('click',deleteCurrentChecklist);
   $('btnEntrega')?.addEventListener('click',abrirEntrega); $('btnSalvarEntrega')?.addEventListener('click',saveEntrega); $('btnPdfEntrega')?.addEventListener('click',gerarPDFEntrega); $('btnXlsxEntrega')?.addEventListener('click',()=>gerarXLSX('entrega')); $('btnVoltarResumo')?.addEventListener('click',()=>go('screenResumo')); $('btnA4Entrega')?.addEventListener('click',()=>printA4(true)); $('btnAnexarEntrega')?.addEventListener('click',()=>anexarOS(true));
   $('btnFecharGestao')?.addEventListener('click',()=>$('modalGestao').classList.add('hidden'));
@@ -1865,7 +1930,7 @@ function bind(){
 }
 async function boot(){
   applyTheme(); bind();
-  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('./service-worker.js?v=15.23.1'); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
+  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('./service-worker.js?v=15.23.2'); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
   $('loginUsr').value=localStorage.getItem('OFICINIA_CHECKLIST_V15_LAST_USER')||localStorage.getItem('j_last_user')||'';
   await loadModel(false); loadSession(true);
   if(!state.session){ const fromSaas=readSaasSession(); if(fromSaas&&sessionOk(fromSaas)){ saveSession(fromSaas,!!localStorage.getItem('j_saved_login')); toast('Sessão do SAAS-2 reconhecida.'); } }

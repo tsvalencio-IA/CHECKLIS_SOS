@@ -1,5 +1,5 @@
 'use strict';
-const CACHE_NAME = 'oficin-ia-checklist-v15.23.1-definitivo';
+const CACHE_NAME = 'oficin-ia-checklist-v15.23.2-pdf-entrega';
 const CORE = [
   './', './index.html', './checklist.html', './login.html', './manifest.webmanifest',
   './js/config.js', './js/checklist.js', './data/checklist-model.json',
