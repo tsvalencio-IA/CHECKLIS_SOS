@@ -774,9 +774,10 @@ function payloadBase(){
   const st=stats(); const ts=nowISO(); const statusChecklist=st.pending===0&&st.percent===100?'concluido':'em_producao';
   const criadoEm=state.currentCreatedAt||ts;
   const finalizadoEm=statusChecklist==='concluido'?(state.currentFinalizedAt||ts):'';
-  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-21', versao:'v15.21', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
+  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-22', versao:'v15.22', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
 }
 async function saveChecklist(){
+  if(state.liveMonitor){ toast('Acompanhamento ao vivo é somente leitura. Abra em Editar para salvar alterações.'); return null; }
   if(!placaNorm($('placa')?.value||'')) { toast('Informe a placa antes de salvar.'); go('screenInicio'); return null; }
   let payload=null;
   setBusy('btnSalvar',true,'Salvando...'); setBusy('btnSaveNow',true,'Salvando...');
@@ -784,127 +785,26 @@ async function saveChecklist(){
     await uploadAllPendingPhotos();
     payload=payloadBase();
     const db=activeDb();
-    if(state.lastSavedId){ await db.collection('checklists').doc(state.lastSavedId).set(payload,{merge:true}); payload.id=state.lastSavedId; }
-    else { const ref=await db.collection('checklists').add(payload); state.lastSavedId=ref.id; payload.id=ref.id; await ref.set({id:ref.id},{merge:true}); }
+    if(!state.lastSavedId) state.lastSavedId=db.collection('checklists').doc().id;
+    payload.id=state.lastSavedId; payload.syncTempoReal=true; payload.liveAtIso=nowISO(); payload.liveBy=state.session?.name||''; payload.liveRole=state.session?.role||'';
+    const fv=window.firebase?.firestore?.FieldValue;
+    await db.collection('checklists').doc(state.lastSavedId).set({...payload,liveAt:fv?.serverTimestamp?fv.serverTimestamp():payload.liveAtIso},{merge:true});
     state.currentCreatedAt=payload.criadoEm||state.currentCreatedAt||nowISO();
     state.currentFinalizedAt=payload.finalizadoEm||'';
-    saveDraft();
+    state.lastAutosaveSignature=realtimeSignature(payload); state.lastLiveSavedAt=payload.liveAtIso;
+    saveDraft(false);
     localStorage.setItem('OFICINIA_CHECKLIST_LAST_'+payload.placa, JSON.stringify({...payload,id:state.lastSavedId}));
-    const statusMsg=payload.statusChecklist==='concluido'?'Checklist concluído e salvo.':`Checklist salvo em produção • ${payload.progressoPercent}% • ${payload.itensPendentes} pendente(s).`;
+    const statusMsg=payload.statusChecklist==='concluido'?'Checklist concluído e salvo.':('Checklist salvo em produção • '+payload.progressoPercent+'% • '+payload.itensPendentes+' pendente(s).');
     let msg=statusMsg;
     if(payload.osRef || payload.osId){
       const linked=await anexarPayloadNaOS({...payload,id:state.lastSavedId},false,true);
-      msg = linked ? `${statusMsg} Anexado na O.S. do Jarvis.` : `${statusMsg} Não encontrei a O.S. informada para anexar.`;
+      msg = linked ? (statusMsg+' Anexado na O.S. do Jarvis.') : (statusMsg+' Não encontrei a O.S. informada para anexar.');
     }
     toast(msg);
     renderResumo(); renderWorkStatus();
     return {...payload,id:state.lastSavedId};
   }catch(e){ console.warn(e); payload=payload||payloadBase(); localStorage.setItem('OFICINIA_CHECKLIST_LOCAL_'+payload.id, JSON.stringify(payload)); toast('Firebase/Cloudinary bloqueou ou está offline. O estado atual ficou salvo localmente.'); return payload; }
   finally{ setBusy('btnSalvar',false); setBusy('btnSaveNow',false); renderWorkStatus(); }
-}
-
-function renderResumo(){
-  const box=$('resumoLista'); if(!box) return;
-  const base=payloadBase(); const q=buildQuoteData(base); const crit=base.itens.filter(i=>ACTIONS_FINAL.has(i.acao));
-  state.lastQuoteData=q; state.lastResumoCriticos=crit;
-  const status=base.statusChecklist; const statusTxt=status==='concluido'?'✅ Concluído':`🔧 Em produção • ${base.progressoPercent}%`;
-  $('resumoPill').textContent = state.lastSavedId ? statusTxt : `${statusTxt} • não salvo`;
-  $('resumoPill').className='pill '+(status==='concluido'?'ok':'warn');
-  if($('btnSalvar')) $('btnSalvar').textContent = state.lastSavedId ? '💾 Salvar alterações' : '✅ Salvar checklist';
-  if($('btnExcluirAtual')) $('btnExcluirAtual').disabled = !state.lastSavedId || !isGestor();
-  const productionNotice=status==='em_producao'?`<div class="notice warn"><b>Checklist em produção:</b> ${base.itensPendentes} item(ns) ainda não foram avaliados. Você pode salvar e continuar depois. O PDF da equipe mostrará claramente que o checklist ainda está incompleto.</div>`:'';
-  const top=`${productionNotice}${state.lastSavedId?`<div class="notice"><b>Registro salvo:</b> alterações futuras serão gravadas no mesmo checklist ${esc(state.lastSavedId)}, sem criar duplicado.</div>`:''}<div class="quote-panel"><div class="quote-head"><button class="quote-card click-card" data-resumo-jump="pecas" type="button"><b>${q.totalPecas}</b><span>peças estimadas</span></button><button class="quote-card click-card" data-resumo-jump="pecas" type="button"><b>${q.pecas.length}</b><span>grupos de peça</span></button><button class="quote-card click-card" data-resumo-jump="servicos" type="button"><b>${q.servicos.length}</b><span>serviços/consertos</span></button><button class="quote-card click-card" data-resumo-jump="avaliar" type="button"><b>${q.avaliar.length}</b><span>avaliar/aprovar</span></button></div><div class="notice"><b>Resumo inteligente:</b> toque em qualquer card, peça, serviço ou item para voltar direto ao ponto correspondente do checklist. Nada foi removido: o laudo técnico completo continua separado.</div></div>`;
-  box.innerHTML = top + renderQuoteGroup('🧾 Peças para cotar/comprar — agrupadas', q.pecas, 'Nenhuma peça para cotar.', 'pecas') + renderQuoteGroup('🛠️ Serviços/consertos — agrupados', q.servicos, 'Nenhum serviço separado.', 'servicos') + renderQuoteGroup('🔎 Itens para avaliar/aprovar', q.avaliar, 'Nada pendente de avaliação.', 'avaliar') + `<div class="quote-group"><h3>📋 Lista técnica completa (${crit.length} itens)</h3>${crit.slice(0,18).map(i=>`<div class="res-line smart-row" data-jump-item="${esc(i.id||'')}"><b>${esc(i.secao)} • ${esc(i.item)}</b><span class="pill ${esc(actionInfo(i.acao).classe)}">${esc(actionInfo(i.acao).emoji)} ${esc(i.acaoLabel)}</span>${i.obs?`<small>${esc(i.obs)}</small>`:''}</div>`).join('')}${crit.length>18?`<div class="notice">Mais ${crit.length-18} item(ns) técnicos estão no PDF técnico completo e na planilha detalhada.</div>`:''}</div>`;
-  bindResumoNavigation();
-}
-
-
-function osIdent(o){
-  if(!o) return '';
-  const raw=o.numero||o.codigo||o.osRef||o.referencia||o.prisma||o.numeroPrisma||'';
-  return String(raw || (o.id ? 'OS '+String(o.id).slice(-6).toUpperCase() : '')).trim();
-}
-function osStatusTxt(o){ return String(o?.status||o?.etapa||o?.situacao||o?.fase||'status não informado').trim(); }
-function osAberta(o){
-  const st=norm(osStatusTxt(o));
-  return !/(entreg|finaliz|cancel|fechad|concluid|arquivad|baixad)/.test(st);
-}
-function osClienteTxt(o){ return String(o?.clienteNome||o?.nomeCliente||o?.cliente?.nome||o?.cliente||'Cliente não informado').trim(); }
-function osVeiculoTxt(o){ return String(o?.veiculoLabel||o?.veiculoModelo||o?.veiculoSnapshot?.modelo||o?.veiculo?.modelo||o?.modelo||o?.veiculo||'Veículo não informado').trim(); }
-function osKmTxt(o){ return String(o?.km||o?.quilometragem||o?.odometro||o?.veiculoKm||'').trim(); }
-function osDataVal(o){ return o?.criadoEm||o?.createdAt||o?.data||o?.dataAbertura||o?.atualizadoEm||''; }
-function renderOSSelecionadaInfo(){
-  const box=$('osSelecionadaInfo'); if(!box) return;
-  const os=state.osSelecionada; const osRef=($('osRef')?.value||'').trim();
-  if(os){
-    box.className='notice';
-    box.innerHTML=`<b>O.S. selecionada:</b> ${esc(osIdent(os)||os.label||os.id||osRef)}<br>${esc(osClienteTxt(os))} • ${esc(osVeiculoTxt(os))} • ${esc(osStatusTxt(os))}<br><small>Ao salvar, o checklist será anexado nessa O.S. do Jarvis.</small>`;
-  } else if(osRef){
-    box.className='notice warn';
-    box.innerHTML=`<b>O.S./referência manual:</b> ${esc(osRef)}<br><small>Para evitar erro, prefira digitar a placa e tocar em “Buscar/selecionar O.S. pela placa”.</small>`;
-  } else {
-    box.className='notice';
-    box.innerHTML='Digite a placa e toque em <b>Buscar/selecionar O.S. pela placa</b>. O mecânico não precisa decorar número de O.S.';
-  }
-}
-function selecionarOS(id){
-  const os=(state.history.os||[]).find(o=>String(o.id)===String(id));
-  if(!os) return toast('Não encontrei essa O.S. na lista carregada.');
-  state.osSelecionada={...os, label:osIdent(os)};
-  const placa=placaNorm(os.placa||os.placaNorm||os.veiculo?.placa||os.veiculoSnapshot?.placa||$('placa')?.value||'');
-  if(placa && $('placa')) $('placa').value=placa;
-  if($('osRef')) $('osRef').value=osIdent(os)||os.id||'';
-  const km=osKmTxt(os); if(km && $('km') && !$('km').value) $('km').value=km;
-  const relato=String(os.relato||os.descricao||os.desc||os.diagnostico||'').trim(); if(relato && $('relato') && !$('relato').value) $('relato').value=relato.slice(0,500);
-  saveDraft(); renderOSSelecionadaInfo(); renderHistorico(); toast('O.S. selecionada. Agora preencha o checklist e salve.');
-}
-
-async function buscarHistorico(){
-  const placa=placaNorm($('placa').value); if(!placa){ toast('Informe a placa.'); return; }
-  $('placa').value=placa; setBusy('btnHistorico',true,'Buscando...');
-  const db=activeDb(); const out={os:[],checklists:[],entregas:[]};
-  async function queryMany(col, fields){
-    const res=[]; const seen=new Set();
-    for(const f of fields){ try{ const snap=await db.collection(col).where(f,'==',placa).limit(15).get(); snap.docs.forEach(d=>{ if(!seen.has(d.id)){ seen.add(d.id); res.push({id:d.id,_col:col,...d.data()}); } }); }catch(e){ console.warn('hist',col,f,e.message); } }
-    return res;
-  }
-  try{
-    out.os = await queryMany('ordens_servico',['placa','placaNorm','veiculo.placa','dadosVeiculo.placa']);
-    if(!out.os.length) out.os = await queryMany('ordensServico',['placa','placaNorm','veiculo.placa']);
-    out.checklists = await queryMany('checklists',['placa','placaNorm']);
-    out.entregas = await queryMany('checklistsEntrega',['placa','placaNorm']);
-    out.os.sort((a,b)=>Number(osAberta(b))-Number(osAberta(a)) || new Date(osDataVal(b)||0)-new Date(osDataVal(a)||0));
-    state.history=out; renderHistorico();
-  }catch(e){ console.warn(e); toast('Histórico indisponível. Checklist continua funcionando.'); }
-  finally{ setBusy('btnHistorico',false); saveDraft(); }
-}
-function renderHistorico(){
-  const box=$('historicoBox'); if(!box) return;
-  const {os,checklists,entregas}=state.history;
-  const html=[];
-  html.push(`<div class="notice"><b>Histórico da placa ${esc(placaNorm($('placa').value))}</b><br>O.S.: ${os.length} • Checklists: ${checklists.length} • Entregas: ${entregas.length}</div>`);
-  os.slice(0,12).forEach(o=>{ const sel=state.osSelecionada && String(state.osSelecionada.id)===String(o.id); html.push(`<div class="hist"><b>${sel?'✅ ':''}O.S. ${esc(osIdent(o)||o.id)} ${osAberta(o)?'<span class="pill ok">Aberta</span>':'<span class="pill">Histórica</span>'}</b><small>${esc(osClienteTxt(o))} • ${esc(osVeiculoTxt(o))} • ${esc(osStatusTxt(o))} • ${fmtDateTime(osDataVal(o))}</small><div class="actions"><button class="btn ok small" data-select-os="${esc(o.id)}" type="button">🔗 Usar esta O.S.</button><button class="btn secondary small" data-copy-os="${esc(osIdent(o)||o.id)}" type="button">Copiar nº</button></div></div>`); });
-  checklists.slice(0,8).forEach(c=>{ const st=checklistStatusOf(c); const pct=checklistProgress(c); html.push(`<div class="hist"><b>Checklist ${esc(c.id)} <span class="pill ${st==='concluido'?'ok':'warn'}">${esc(checklistStatusLabel(c))}</span></b><small>${fmtDateTime(c.atualizadoEm||c.criadoEm||c.createdAt)} • ${esc(c.responsavel||c.mecanico||'')} • ${pct}% • Pendentes: ${onlyFinite(c.stats?.pending??c.itensPendentes)}</small><div class="actions"><button class="btn ${st==='em_producao'?'warn':'secondary'} small" data-load-hist="${esc(c.id)}" type="button">${st==='em_producao'?'▶ Continuar':'✏️ Editar'}</button><button class="btn secondary small" data-pdf-team-hist="${esc(c.id)}" type="button">📄 PDF equipe</button><button class="btn secondary small" data-pdf-hist="${esc(c.id)}" type="button">📋 PDF técnico</button>${isGestor()?`<button class="btn bad small" data-del-check="${esc(c.id)}" data-col="${esc(c._col||'checklists')}" type="button">🗑️ Excluir</button>`:''}</div></div>`); });
-  box.innerHTML=html.join('');
-  $$('[data-select-os]',box).forEach(b=>b.addEventListener('click',()=>selecionarOS(b.dataset.selectOs)));
-  $$('[data-copy-os]',box).forEach(b=>b.addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(b.dataset.copyOs||''); toast('Número da O.S. copiado.'); }catch(e){ toast('O.S.: '+(b.dataset.copyOs||'')); } }));
-  $$('[data-del-check]',box).forEach(b=>b.addEventListener('click',()=>deleteChecklist(b.dataset.col,b.dataset.delCheck)));
-  $$('[data-load-hist]',box).forEach(b=>b.addEventListener('click',()=>loadChecklistFromList(state.history.checklists,b.dataset.loadHist)));
-  $$('[data-pdf-team-hist]',box).forEach(b=>b.addEventListener('click',()=>{ const c=(state.history.checklists||[]).find(x=>x.id===b.dataset.pdfTeamHist); if(c) gerarPDFEquipe(c); }));
-  $$('[data-pdf-hist]',box).forEach(b=>b.addEventListener('click',()=>{ const c=(state.history.checklists||[]).find(x=>x.id===b.dataset.pdfHist); if(c) gerarPDF(c); }));
-}
-async function deleteChecklist(col,id){
-  if(!isGestor()) return toast('Somente gestor/gerente/admin pode excluir.');
-  if(!id) return toast('Nenhum checklist salvo selecionado.');
-  if(!confirm('Excluir checklist salvo? A O.S. não será apagada.')) return;
-  try{
-    await activeDb().collection(col||'checklists').doc(id).delete();
-    if(state.lastSavedId===id){ state.lastSavedId=''; state.currentCreatedAt=''; state.currentFinalizedAt=''; saveDraft(); }
-    state.consulta=state.consulta.filter(x=>x.id!==id);
-    if(placaNorm($('placa')?.value||'')) await buscarHistorico();
-    renderConsulta(); renderResumo();
-    toast('Checklist excluído.');
-  }catch(e){ console.warn(e); toast('Firebase não permitiu excluir. Confira regras de gestor.'); }
 }
 async function deleteCurrentChecklist(){
   if(!state.lastSavedId) return toast('Este checklist ainda não foi salvo no Firebase.');
@@ -982,7 +882,7 @@ function entregaPayloadBase(){
   const base=payloadBase();
   const itens=getCriticalItems().map(i=>({checklistItemId:i.id, item:i.item, secao:i.secao, acao:i.acao, acaoLabel:i.acaoLabel, diagnosticoObs:i.obs, fotos:i.fotos||0, fotoUrls:i.fotoUrls||[], entrega:state.delivery[i.id]||{status:'pendente'}}));
   const dataEntrega=($('entregaData')?.value||'').trim();
-  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-21', versao:'v15.21', registroEntrega:true};
+  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-22', versao:'v15.22', registroEntrega:true};
 }
 async function saveEntrega(){
   setBusy('btnSalvarEntrega',true,'Salvando entrega...');
@@ -1154,7 +1054,7 @@ async function gerarPDFEquipe(source,mode='save'){
     y=ensure(y,18); doc.setFillColor(g.color[0],g.color[1],g.color[2]); doc.roundedRect(9,y-4,192,9,2,2,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(`${g.title} (${g.itens.length})`,13,y+1.5); y+=9;
     const sorted=[...g.itens].sort((a,b)=>String(a.secao||'').localeCompare(String(b.secao||''),'pt-BR') || String(a.item||'').localeCompare(String(b.item||''),'pt-BR'));
     for(const i of sorted){
-      const obs=String(i.obs||i.diagnosticoObs||'').trim(); const itemLines=doc.splitTextToSize(String(i.item||'Item'),112); const obsLines=obs?doc.splitTextToSize('Obs.: '+obs,165):[]; const h=Math.max(10,itemLines.length*3.5+obsLines.length*3.1+4);
+      const obs=String(i.obs||i.diagnosticoObs||'').trim(); const itemLines=doc.splitTextToSize(String(i.item||'Item'),112); const obsPrefix=i.obsPorVoz?'Obs. por voz: ':'Obs.: '; const obsLines=obs?doc.splitTextToSize(obsPrefix+obs,165):[]; const h=Math.max(10,itemLines.length*3.5+obsLines.length*3.1+4);
       y=ensure(y,h+2);
       doc.setDrawColor(226,232,240); doc.setFillColor(255,255,255); doc.roundedRect(9,y-3,192,h,2,2,'FD');
       doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(100,116,139); doc.text(String(i.secao||'Geral').toUpperCase().slice(0,30),13,y+2);
@@ -1223,7 +1123,7 @@ async function gerarPDF(source){
       const meta=[]; if(i.acaoLabel) meta.push('Ação: '+i.acaoLabel); if(i.entrega?.status) meta.push('Entrega: '+i.entrega.status); if(i.criticidade&&i.criticidade!=='normal') meta.push('Criticidade: '+i.criticidade); if(i.fotos) meta.push('Fotos: '+i.fotos); if(i.updatedBy) meta.push('Por: '+i.updatedBy);
       if(meta.length) doc.text(meta.join(' • ').slice(0,110),31,y+4.3);
       y+=8;
-      if(i.obs || i.diagnosticoObs || i.entrega?.obs){ doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(51,65,85); y=pdfLine(doc,'Obs.: '+(i.obs||i.diagnosticoObs||i.entrega?.obs),31,y,158)+1; }
+      if(i.obs || i.diagnosticoObs || i.entrega?.obs){ doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(51,65,85); y=pdfLine(doc,(i.obsPorVoz?'Obs. por voz: ':'Obs.: ')+(i.obs||i.diagnosticoObs||i.entrega?.obs),31,y,158)+1; }
       doc.setDrawColor(226,232,240); doc.line(12,y,198,y); y+=3;
     });
   });
@@ -1258,7 +1158,7 @@ function gerarXLSX(kind='checklist'){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sheetGroups(q.pecas)),'Pecas_Agrupadas');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sheetGroups(q.servicos)),'Servicos_Agrupados');
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sheetGroups(q.avaliar)),'Avaliar_Aprovar');
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(base.itens.map(i=>({Secao:i.secao,Item:i.item,Acao:i.acaoLabel||i.acao,ClasseCotacao:quoteKind(i),ItemAgrupado:quoteBaseName(i),Posicao:posicaoInfoFromText(i.item+' '+(i.obs||'')).map(p=>p.code).join(', '),Obs:i.obs||'',Obrigatorio:i.obrigatorio?'Sim':'Não',Criticidade:i.criticidade||'',Fotos:i.fotos||0,LinksFotos:(i.fotoUrls||[]).join(' | '),AtualizadoPor:i.updatedBy||''}))),'Itens_Detalhados');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(base.itens.map(i=>({Secao:i.secao,Item:i.item,Acao:i.acaoLabel||i.acao,ClasseCotacao:quoteKind(i),ItemAgrupado:quoteBaseName(i),Posicao:posicaoInfoFromText(i.item+' '+(i.obs||'')).map(p=>p.code).join(', '),Obs:i.obs||'',OrigemObservacao:i.obsPorVoz?'Microfone / voz':'Digitada',ObservacaoPor:i.obsVozPor||i.updatedBy||'',Obrigatorio:i.obrigatorio?'Sim':'Não',Criticidade:i.criticidade||'',Fotos:i.fotos||0,LinksFotos:(i.fotoUrls||[]).join(' | '),AtualizadoPor:i.updatedBy||''}))),'Itens_Detalhados');
   const fotos=allPhotoEntries(base).map(f=>({Tipo:f.secao,Descricao:f.label,Link:f.url}));
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(fotos),'Fotos');
   const entrega=getCriticalItems().map(i=>({Secao:i.secao,Item:i.item,AcaoTecnica:i.acaoLabel,StatusEntrega:state.delivery[i.id]?.status||'pendente',ObsEntrega:state.delivery[i.id]?.obs||'',Conferente:base.verificadorEntrega||'',EntreguePor:$('entregaEntreguePor')?.value||'',RecebidoPor:$('entregaRecebidoPor')?.value||'',DataEntrega:$('entregaData')?.value||''}));
