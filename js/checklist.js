@@ -1518,37 +1518,68 @@ function speechRecognitionInstance(){
   if(!SR) return null;
   const rec=new SR(); rec.lang='pt-BR'; rec.continuous=false; rec.interimResults=true; rec.maxAlternatives=1; return rec;
 }
+function nativeSpeechPlugin(){
+  const C=window.Capacitor;
+  if(!C) return null;
+  try{
+    if(typeof C.isNativePlatform==='function' && !C.isNativePlatform()) return null;
+    if(C.Plugins?.SpeechRecognition) return C.Plugins.SpeechRecognition;
+    if(typeof C.registerPlugin==='function') return C.registerPlugin('SpeechRecognition');
+  }catch(e){ console.warn('native speech plugin',e); }
+  return null;
+}
+function commitVoiceObservation(itemId,text){
+  const clean=String(text||'').trim(); if(!clean) return false;
+  const ans=ensureAnswer(itemId);
+  ans.obs=((ans.obs||'')+' '+clean).trim(); ans.obsPorVoz=true; ans.obsOrigem='microfone'; ans.obsVozEm=nowISO(); ans.obsVozPor=state.session?.name||''; ans.updatedAt=nowISO(); ans.updatedBy=state.session?.name||'';
+  saveDraft(); renderSections(); renderProgress();
+  return true;
+}
+async function captureNativeSpeech(promptText){
+  const plugin=nativeSpeechPlugin(); if(!plugin) return null;
+  try{
+    const av=await plugin.available(); if(av && av.available===false) return null;
+    if(typeof plugin.checkPermissions==='function'){
+      let perm=await plugin.checkPermissions();
+      if(perm?.speechRecognition!=='granted' && typeof plugin.requestPermissions==='function') perm=await plugin.requestPermissions();
+      if(perm?.speechRecognition && perm.speechRecognition!=='granted') throw new Error('permission_denied');
+    }
+    const out=await plugin.start({language:'pt-BR',maxResults:1,prompt:promptText||'Fale a observação',partialResults:false,popup:true});
+    return String(out?.matches?.[0]||'').trim() || null;
+  }catch(e){ console.warn('native speech',e); return null; }
+}
 async function dictateToItem(itemId){
   if(state.liveMonitor) return toast('Acompanhamento ao vivo é somente leitura.');
-  const rec=speechRecognitionInstance();
-  if(!rec) return toast('Ditado por voz: use Chrome ou Edge atualizado no PC/Android.');
-  try{ await ensureMicrophoneAccess(); }catch(e){ console.warn(e); return toast('Microfone bloqueado. Libere a permissão do microfone para este site.'); }
-  try{ if(state.dictation && typeof state.dictation.stop==='function') state.dictation.stop(); }catch(e){}
-  state.dictation=rec;
   const btn=document.querySelector('[data-dictate="'+CSS.escape(itemId)+'"]');
   if(btn){ btn.textContent='🎙️ Ouvindo...'; btn.disabled=true; }
-  let finalText='';
+  const nativeText=await captureNativeSpeech('Fale a observação deste item');
+  if(nativeText){ commitVoiceObservation(itemId,nativeText); toast('Observação por voz registrada e sincronizada.'); return; }
+  const rec=speechRecognitionInstance();
+  if(!rec){ if(btn){ btn.textContent='🎤 Falar observação'; btn.disabled=false; } return toast('Ditado por voz não disponível. No PC use Chrome/Edge; no APK mantenha a versão atualizada.'); }
+  try{ await ensureMicrophoneAccess(); }catch(e){ console.warn(e); if(btn){ btn.textContent='🎤 Falar observação'; btn.disabled=false; } return toast('Microfone bloqueado. Libere a permissão do microfone para este site.'); }
+  try{ if(state.dictation && typeof state.dictation.stop==='function') state.dictation.stop(); }catch(e){}
+  state.dictation=rec; let finalText='';
   rec.onresult=e=>{
     let chunk='';
     for(let i=e.resultIndex;i<e.results.length;i++) if(e.results[i].isFinal) chunk+=(e.results[i][0]?.transcript||'')+' ';
     chunk=chunk.trim(); if(!chunk) return;
-    finalText=(finalText+' '+chunk).trim();
-    const ans=ensureAnswer(itemId);
-    ans.obs=((ans.obs||'')+' '+chunk).trim(); ans.obsPorVoz=true; ans.obsOrigem='microfone'; ans.obsVozEm=nowISO(); ans.obsVozPor=state.session?.name||''; ans.updatedAt=nowISO(); ans.updatedBy=state.session?.name||'';
-    saveDraft(); renderSections(); renderProgress();
+    finalText=(finalText+' '+chunk).trim(); commitVoiceObservation(itemId,chunk);
   };
   rec.onerror=e=>{ console.warn('speech',e.error); if(e.error!=='aborted') toast(e.error==='not-allowed'?'Microfone bloqueado pelo navegador.':'Não consegui reconhecer a fala. Tente novamente.'); };
   rec.onend=()=>{ state.dictation=null; if(finalText) toast('Observação por voz registrada e sincronizada.'); else if(btn && document.body.contains(btn)){ btn.textContent='🎤 Falar observação'; btn.disabled=false; } };
-  try{ rec.start(); }catch(e){ state.dictation=null; toast('Não foi possível iniciar o microfone.'); }
+  try{ rec.start(); }catch(e){ state.dictation=null; if(btn){ btn.textContent='🎤 Falar observação'; btn.disabled=false; } toast('Não foi possível iniciar o microfone.'); }
 }
 async function dictateRelato(){
-  const rec=speechRecognitionInstance(); if(!rec) return toast('Ditado por voz: use Chrome ou Edge atualizado.');
+  const nativeText=await captureNativeSpeech('Fale o diagnóstico técnico');
+  if(nativeText){ $('diagnostico').value=(($('diagnostico').value||'')+' '+nativeText).trim(); saveDraft(); toast('Diagnóstico por voz registrado.'); return; }
+  const rec=speechRecognitionInstance(); if(!rec) return toast('Ditado por voz não disponível neste dispositivo.');
   try{ await ensureMicrophoneAccess(); }catch(e){ return toast('Microfone bloqueado. Libere a permissão do site.'); }
   rec.interimResults=false;
   rec.onresult=e=>{ $('diagnostico').value=(($('diagnostico').value||'')+' '+(e.results?.[0]?.[0]?.transcript||'')).trim(); saveDraft(); toast('Diagnóstico por voz registrado.'); };
   rec.onerror=e=>{ if(e.error!=='aborted') toast('Não consegui reconhecer a fala.'); };
   try{ rec.start(); }catch(e){ toast('Não foi possível iniciar o microfone.'); }
 }
+
 async function toggleAudio(){
   if(state.mediaRecorder && state.mediaRecorder.state==='recording'){ state.mediaRecorder.stop(); return; }
   try{
