@@ -1,5 +1,5 @@
 'use strict';
-const CACHE_NAME = 'oficin-ia-checklist-v15.21.1-saas2-producao-pdf-equipe';
+const CACHE_NAME = 'oficin-ia-checklist-v15.22.0-tempo-real-microfone';
 const CORE = [
   './', './index.html', './checklist.html', './login.html', './manifest.webmanifest',
   './js/config.js', './js/checklist.js', './data/checklist-model.json',
