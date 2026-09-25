@@ -36,10 +36,10 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const pkg = {
-            name: 'oficin-ia-checklist-v15-22-tempo-real-microfone',
-            version: '15.22.0',
+            name: 'oficin-ia-checklist-v15-22-2-tempo-real-microfone-pdf',
+            version: '15.22.2',
             private: true,
-            description: 'OFICIN-IA Checklist V15.22 com sincronização em tempo real, acompanhamento ao vivo e observações por voz.',
+            description: 'OFICIN-IA Checklist V15.22.2 com sincronização em tempo real, acompanhamento ao vivo e observações por voz.',
             scripts: {
               'prepare:apk': 'node scripts/prepare-apk.js',
               'android:icons': 'node scripts/generate-android-icons.js',
@@ -75,8 +75,8 @@ jobs:
           const total=(model.secoes||[]).reduce((n,s)=>n+(s.itens||[]).length,0);
           if(total < 160) throw new Error('Modelo do checklist incompleto: '+total+' itens');
           const js=fs.readFileSync('js/checklist.js','utf8');
-          for(const req of ['autosaveRealtime','startLiveChecklistFromConsulta','Falar observação','obsPorVoz','SAAS-2']){
-            if(!js.includes(req)) throw new Error('Recurso V15.22 ausente: '+req);
+          for(const req of ['autosaveRealtime','startLiveChecklistFromConsulta','Falar observação','obsPorVoz','normalizeSavedChecklistForReport','gerarPdfSalvo','normalizeModelShape','SAAS-2']){
+            if(!js.includes(req)) throw new Error('Recurso V15.22.2 ausente: '+req);
           }
           if(!pkg.dependencies?.['@capacitor-community/speech-recognition']) throw new Error('Plugin nativo de voz ausente.');
           console.log('Validação OK •', total, 'itens • tempo real + voz presentes');
@@ -152,5 +152,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: OFICIN-IA-CHECKLIST-V15-22-TEMPO-REAL-MICROFONE
+          name: OFICIN-IA-CHECKLIST-V15-22-2-TEMPO-REAL-MICROFONE-PDF
           path: android/app/build/outputs/apk/debug/app-debug.apk
