@@ -1,6 +1,6 @@
 {
   "name": "oficin-ia-checklist-v15-22-tempo-real-microfone",
-  "version": "15.22.0",
+  "version": "15.22.1",
   "private": true,
   "description": "OFICIN-IA Checklist V15.22: PC e celular em tempo real, acompanhamento ao vivo, observações por voz e PDF de equipe.",
   "scripts": {
