@@ -640,7 +640,7 @@ function renderSections(){
     const open = q || state.activeSection===sec.id;
     const footer = q ? '' : `<div class="section-footer ${fullStats.complete?'done':''}"><div><b>${fullStats.complete?'✅ Seção completa':'⚠️ Falta marcar '+fullStats.pending+' item(ns)'}</b><small>${fullStats.complete?'Você pode avançar quando quiser.':'Depois de conferir visualmente a seção, você pode marcar somente os pendentes como OK de uma vez. Itens já marcados não são alterados.'}</small></div><div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${fullStats.pending?`<button class="btn secondary small" data-ok-pending="${esc(sec.id)}" type="button">✅ Pendentes = OK</button>`:''}<button class="btn ${fullStats.complete?'ok':'secondary'} small" data-next-section="${esc(sec.id)}" ${fullStats.complete?'':'disabled'} type="button">${fullStats.complete?'Próxima seção ➜':'Complete a seção'}</button></div></div>`;
     return `<div class="section ${open?'open':''}" data-section="${esc(sec.id)}">
-      <div class="section-head" data-open-section="${esc(sec.id)}"><h3>${esc(sec.emoji||'🔧')} ${esc(sec.titulo)}</h3><div style="display:flex;gap:7px;align-items:center"><span class="pill">${done}/${items.length}</span>${isGestor()?`<button class="btn secondary small" data-manage="${esc(sec.id)}" type="button">✏️ Editar</button>`:''}</div></div>
+      <div class="section-head" data-open-section="${esc(sec.id)}"><h3>${esc(sec.emoji||'🔧')} ${esc(sec.titulo)}</h3><div style="display:flex;gap:7px;align-items:center"><span class="pill">${done}/${items.length}</span>${isGestor()&&!state.liveMonitor?`<button class="btn secondary small" data-manage="${esc(sec.id)}" type="button">✏️ Editar</button>`:''}</div></div>
       <div class="section-body"><div class="notice">${esc(sec.hint||'')}</div>${items.map(it=>renderItem(sec,it)).join('')}${footer}</div>
     </div>`;
   }).join('');
@@ -650,7 +650,7 @@ function renderSections(){
   $$('[data-action]').forEach(b=>b.addEventListener('click',()=>setAction(b.dataset.item,b.dataset.action)));
   $$('[data-ok-pending]').forEach(b=>b.addEventListener('click',()=>markSectionPendingOk(b.dataset.okPending)));
   $$('[data-next-section]').forEach(b=>b.addEventListener('click',()=>goNextSection(b.dataset.nextSection)));
-  $$('[data-obs]').forEach(t=>t.addEventListener('input',()=>{ ensureAnswer(t.dataset.obs).obs=t.value; saveDraft(); renderProgress(); }));
+  $('[data-obs]').forEach(t=>t.addEventListener('input',()=>{ if(state.liveMonitor) return; const ans=ensureAnswer(t.dataset.obs); ans.obs=t.value; ans.updatedAt=nowISO(); ans.updatedBy=state.session?.name||''; saveDraft(); renderProgress(); }));
   $$('[data-dictate]').forEach(b=>b.addEventListener('click',()=>dictateToItem(b.dataset.dictate)));
   $$('[data-photo-choice]').forEach(b=>b.addEventListener('click',()=>openPhotoChoice(b.dataset.photoChoice)));
   $$('[data-photo-item]').forEach(inp=>inp.addEventListener('change',e=>addItemPhotos(inp.dataset.photoItem,e.target.files)));
@@ -658,12 +658,13 @@ function renderSections(){
 function renderItem(sec,it){
   const ans=state.answers[it.id]||{};
   const photos=state.itemPhotos[it.id]||[];
+  const locked=!!state.liveMonitor; const lockAttr=locked?'disabled aria-disabled="true"':''; const voice=ans.obsPorVoz?'<span class="pill">🎤 Obs. por voz</span>':'';
   const req=it.obrigatorio!==false?'<span class="pill bad">Obrigatório</span>':'';
   const crit=it.criticidade&&it.criticidade!=='normal'?`<span class="pill ${it.criticidade==='critico'?'bad':'warn'}">${esc(it.criticidade)}</span>`:'';
   return `<div class="item ${ans.acao?'has-action':''}" data-item-box="${esc(it.id)}">
-    <div class="item-top"><div><div class="item-title">${esc(it.titulo)}</div>${it.hint?`<div class="item-hint">${esc(it.hint)}</div>`:''}<div class="badges">${req}${crit}</div></div><span class="pill ${actionInfo(ans.acao).classe||''}">${ans.acao?esc(actionInfo(ans.acao).emoji+' '+actionInfo(ans.acao).label):'Pendente'}</span></div>
-    <div class="action-chips">${(it.acoes||['ok','atencao','trocar','na']).map(a=>{const ai=actionInfo(a); return `<button class="chip ${esc(ai.classe)} ${ans.acao===a?'on':''}" data-action="${esc(a)}" data-item="${esc(it.id)}" type="button">${esc(ai.emoji)} ${esc(ai.label)}</button>`}).join('')}</div>
-    <div class="item-extra"><textarea data-obs="${esc(it.id)}" placeholder="Observação rápida deste item...">${esc(ans.obs||'')}</textarea><div class="micro-actions"><button class="btn secondary small" data-dictate="${esc(it.id)}" type="button">🗣️ Ditar obs.</button><button class="btn secondary small" data-photo-choice="${esc(it.id)}" type="button">📎 Imagem</button></div>${photos.length?`<div class="photos">${photos.map(p=>`<img src="${esc(p)}" alt="foto">`).join('')}</div>`:''}</div>
+    <div class="item-top"><div><div class="item-title">${esc(it.titulo)}</div>${it.hint?`<div class="item-hint">${esc(it.hint)}</div>`:''}<div class="badges">${req}${crit}${voice}</div></div><span class="pill ${actionInfo(ans.acao).classe||''}">${ans.acao?esc(actionInfo(ans.acao).emoji+' '+actionInfo(ans.acao).label):'Pendente'}</span></div>
+    <div class="action-chips">${(it.acoes||['ok','atencao','trocar','na']).map(a=>{const ai=actionInfo(a); return `<button class="chip ${esc(ai.classe)} ${ans.acao===a?'on':''}" data-action="${esc(a)}" data-item="${esc(it.id)}" type="button" ${lockAttr}>${esc(ai.emoji)} ${esc(ai.label)}</button>`}).join('')}</div>
+    <div class="item-extra"><textarea data-obs="${esc(it.id)}" placeholder="Observação rápida deste item..." ${locked?'readonly':''}>${esc(ans.obs||'')}</textarea><div class="micro-actions"><button class="btn secondary small" data-dictate="${esc(it.id)}" type="button" ${lockAttr}>🎤 Falar observação</button><button class="btn secondary small" data-photo-choice="${esc(it.id)}" type="button" ${lockAttr}>📎 Imagem</button></div>${photos.length?`<div class="photos">${photos.map(p=>`<img src="${esc(p)}" alt="foto">`).join('')}</div>`:''}</div>
   </div>`;
 }
 function ensureAnswer(itemId){
@@ -671,6 +672,7 @@ function ensureAnswer(itemId){
   return state.answers[itemId];
 }
 function setAction(itemId,action){
+  if(state.liveMonitor) return toast('Acompanhamento ao vivo é somente leitura. Use Editar para alterar.');
   const im=itemMap()[itemId]||{}; const ans=ensureAnswer(itemId);
   ans.item=im.titulo||itemId; ans.secao=im.secaoTitulo||''; ans.secaoId=im.secaoId||''; ans.acao=action; ans.acaoLabel=actionInfo(action).label; ans.updatedAt=nowISO(); ans.updatedBy=state.session?.name||'';
   saveDraft();
@@ -680,6 +682,7 @@ function setAction(itemId,action){
   if(completedAfter) toast('Seção completa. Ela não vai mudar sozinha; toque em “Próxima seção” para avançar.');
 }
 function markSectionPendingOk(secId){
+  if(state.liveMonitor) return toast('Acompanhamento ao vivo é somente leitura.');
   const sec=(state.model?.secoes||[]).find(s=>s.id===secId); if(!sec) return;
   const pending=(sec.itens||[]).filter(it=>!state.answers[it.id]?.acao);
   if(!pending.length) return toast('Esta seção já está completa.');
@@ -1454,13 +1457,48 @@ function addPhotosToArray(files, target, done){
 }
 function addItemPhotos(itemId,files){ state.itemPhotos[itemId]=state.itemPhotos[itemId]||[]; addPhotosToArray(files,state.itemPhotos[itemId],()=>{ renderSections(); toast('Foto anexada ao item.'); }); }
 function renderPhotos(){ const box=$('fotosGerais'); if(box) box.innerHTML=(state.generalPhotos||[]).map(p=>`<img src="${esc(p)}" alt="foto geral">`).join(''); }
-function dictateToItem(itemId){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR) return toast('Ditado não suportado neste navegador.');
-  const rec=new SR(); rec.lang='pt-BR'; rec.interimResults=false; rec.onresult=e=>{ const text=e.results?.[0]?.[0]?.transcript||''; const ans=ensureAnswer(itemId); ans.obs=(ans.obs?ans.obs+' ':'')+text; saveDraft(); renderSections(); toast('Observação ditada.'); }; rec.start();
+async function ensureMicrophoneAccess(){
+  if(!window.isSecureContext && location.hostname!=='localhost') throw new Error('O microfone exige conexão HTTPS.');
+  if(navigator.mediaDevices?.getUserMedia){
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    stream.getTracks().forEach(t=>t.stop());
+  }
 }
-function dictateRelato(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR) return toast('Ditado não suportado neste navegador.');
-  const rec=new SR(); rec.lang='pt-BR'; rec.onresult=e=>{ $('diagnostico').value = (($('diagnostico').value||'')+' '+(e.results?.[0]?.[0]?.transcript||'')).trim(); saveDraft(); }; rec.start();
+function speechRecognitionInstance(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR) return null;
+  const rec=new SR(); rec.lang='pt-BR'; rec.continuous=false; rec.interimResults=true; rec.maxAlternatives=1; return rec;
+}
+async function dictateToItem(itemId){
+  if(state.liveMonitor) return toast('Acompanhamento ao vivo é somente leitura.');
+  const rec=speechRecognitionInstance();
+  if(!rec) return toast('Ditado por voz: use Chrome ou Edge atualizado no PC/Android.');
+  try{ await ensureMicrophoneAccess(); }catch(e){ console.warn(e); return toast('Microfone bloqueado. Libere a permissão do microfone para este site.'); }
+  try{ if(state.dictation && typeof state.dictation.stop==='function') state.dictation.stop(); }catch(e){}
+  state.dictation=rec;
+  const btn=document.querySelector('[data-dictate="'+CSS.escape(itemId)+'"]');
+  if(btn){ btn.textContent='🎙️ Ouvindo...'; btn.disabled=true; }
+  let finalText='';
+  rec.onresult=e=>{
+    let chunk='';
+    for(let i=e.resultIndex;i<e.results.length;i++) if(e.results[i].isFinal) chunk+=(e.results[i][0]?.transcript||'')+' ';
+    chunk=chunk.trim(); if(!chunk) return;
+    finalText=(finalText+' '+chunk).trim();
+    const ans=ensureAnswer(itemId);
+    ans.obs=((ans.obs||'')+' '+chunk).trim(); ans.obsPorVoz=true; ans.obsOrigem='microfone'; ans.obsVozEm=nowISO(); ans.obsVozPor=state.session?.name||''; ans.updatedAt=nowISO(); ans.updatedBy=state.session?.name||'';
+    saveDraft(); renderSections(); renderProgress();
+  };
+  rec.onerror=e=>{ console.warn('speech',e.error); if(e.error!=='aborted') toast(e.error==='not-allowed'?'Microfone bloqueado pelo navegador.':'Não consegui reconhecer a fala. Tente novamente.'); };
+  rec.onend=()=>{ state.dictation=null; if(finalText) toast('Observação por voz registrada e sincronizada.'); else if(btn && document.body.contains(btn)){ btn.textContent='🎤 Falar observação'; btn.disabled=false; } };
+  try{ rec.start(); }catch(e){ state.dictation=null; toast('Não foi possível iniciar o microfone.'); }
+}
+async function dictateRelato(){
+  const rec=speechRecognitionInstance(); if(!rec) return toast('Ditado por voz: use Chrome ou Edge atualizado.');
+  try{ await ensureMicrophoneAccess(); }catch(e){ return toast('Microfone bloqueado. Libere a permissão do site.'); }
+  rec.interimResults=false;
+  rec.onresult=e=>{ $('diagnostico').value=(($('diagnostico').value||'')+' '+(e.results?.[0]?.[0]?.transcript||'')).trim(); saveDraft(); toast('Diagnóstico por voz registrado.'); };
+  rec.onerror=e=>{ if(e.error!=='aborted') toast('Não consegui reconhecer a fala.'); };
+  try{ rec.start(); }catch(e){ toast('Não foi possível iniciar o microfone.'); }
 }
 async function toggleAudio(){
   if(state.mediaRecorder && state.mediaRecorder.state==='recording'){ state.mediaRecorder.stop(); return; }
