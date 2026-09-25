@@ -806,6 +806,109 @@ async function saveChecklist(){
   }catch(e){ console.warn(e); payload=payload||payloadBase(); localStorage.setItem('OFICINIA_CHECKLIST_LOCAL_'+payload.id, JSON.stringify(payload)); toast('Firebase/Cloudinary bloqueou ou está offline. O estado atual ficou salvo localmente.'); return payload; }
   finally{ setBusy('btnSalvar',false); setBusy('btnSaveNow',false); renderWorkStatus(); }
 }
+function renderResumo(){
+  const box=$('resumoLista'); if(!box) return;
+  const base=payloadBase(); const q=buildQuoteData(base); const crit=base.itens.filter(i=>ACTIONS_FINAL.has(i.acao));
+  state.lastQuoteData=q; state.lastResumoCriticos=crit;
+  const status=base.statusChecklist; const statusTxt=status==='concluido'?'✅ Concluído':`🔧 Em produção • ${base.progressoPercent}%`;
+  $('resumoPill').textContent = state.lastSavedId ? statusTxt : `${statusTxt} • não salvo`;
+  $('resumoPill').className='pill '+(status==='concluido'?'ok':'warn');
+  if($('btnSalvar')) $('btnSalvar').textContent = state.lastSavedId ? '💾 Salvar alterações' : '✅ Salvar checklist';
+  if($('btnExcluirAtual')) $('btnExcluirAtual').disabled = !state.lastSavedId || !isGestor();
+  const productionNotice=status==='em_producao'?`<div class="notice warn"><b>Checklist em produção:</b> ${base.itensPendentes} item(ns) ainda não foram avaliados. Você pode salvar e continuar depois. O PDF da equipe mostrará claramente que o checklist ainda está incompleto.</div>`:'';
+  const top=`${productionNotice}${state.lastSavedId?`<div class="notice"><b>Registro salvo:</b> alterações futuras serão gravadas no mesmo checklist ${esc(state.lastSavedId)}, sem criar duplicado.</div>`:''}<div class="quote-panel"><div class="quote-head"><button class="quote-card click-card" data-resumo-jump="pecas" type="button"><b>${q.totalPecas}</b><span>peças estimadas</span></button><button class="quote-card click-card" data-resumo-jump="pecas" type="button"><b>${q.pecas.length}</b><span>grupos de peça</span></button><button class="quote-card click-card" data-resumo-jump="servicos" type="button"><b>${q.servicos.length}</b><span>serviços/consertos</span></button><button class="quote-card click-card" data-resumo-jump="avaliar" type="button"><b>${q.avaliar.length}</b><span>avaliar/aprovar</span></button></div><div class="notice"><b>Resumo inteligente:</b> toque em qualquer card, peça, serviço ou item para voltar direto ao ponto correspondente do checklist. Nada foi removido: o laudo técnico completo continua separado.</div></div>`;
+  box.innerHTML = top + renderQuoteGroup('🧾 Peças para cotar/comprar — agrupadas', q.pecas, 'Nenhuma peça para cotar.', 'pecas') + renderQuoteGroup('🛠️ Serviços/consertos — agrupados', q.servicos, 'Nenhum serviço separado.', 'servicos') + renderQuoteGroup('🔎 Itens para avaliar/aprovar', q.avaliar, 'Nada pendente de avaliação.', 'avaliar') + `<div class="quote-group"><h3>📋 Lista técnica completa (${crit.length} itens)</h3>${crit.slice(0,18).map(i=>`<div class="res-line smart-row" data-jump-item="${esc(i.id||'')}"><b>${esc(i.secao)} • ${esc(i.item)}</b><span class="pill ${esc(actionInfo(i.acao).classe)}">${esc(actionInfo(i.acao).emoji)} ${esc(i.acaoLabel)}</span>${i.obs?`<small>${esc(i.obs)}</small>`:''}</div>`).join('')}${crit.length>18?`<div class="notice">Mais ${crit.length-18} item(ns) técnicos estão no PDF técnico completo e na planilha detalhada.</div>`:''}</div>`;
+  bindResumoNavigation();
+}
+
+
+function osIdent(o){
+  if(!o) return '';
+  const raw=o.numero||o.codigo||o.osRef||o.referencia||o.prisma||o.numeroPrisma||'';
+  return String(raw || (o.id ? 'OS '+String(o.id).slice(-6).toUpperCase() : '')).trim();
+}
+function osStatusTxt(o){ return String(o?.status||o?.etapa||o?.situacao||o?.fase||'status não informado').trim(); }
+function osAberta(o){
+  const st=norm(osStatusTxt(o));
+  return !/(entreg|finaliz|cancel|fechad|concluid|arquivad|baixad)/.test(st);
+}
+function osClienteTxt(o){ return String(o?.clienteNome||o?.nomeCliente||o?.cliente?.nome||o?.cliente||'Cliente não informado').trim(); }
+function osVeiculoTxt(o){ return String(o?.veiculoLabel||o?.veiculoModelo||o?.veiculoSnapshot?.modelo||o?.veiculo?.modelo||o?.modelo||o?.veiculo||'Veículo não informado').trim(); }
+function osKmTxt(o){ return String(o?.km||o?.quilometragem||o?.odometro||o?.veiculoKm||'').trim(); }
+function osDataVal(o){ return o?.criadoEm||o?.createdAt||o?.data||o?.dataAbertura||o?.atualizadoEm||''; }
+function renderOSSelecionadaInfo(){
+  const box=$('osSelecionadaInfo'); if(!box) return;
+  const os=state.osSelecionada; const osRef=($('osRef')?.value||'').trim();
+  if(os){
+    box.className='notice';
+    box.innerHTML=`<b>O.S. selecionada:</b> ${esc(osIdent(os)||os.label||os.id||osRef)}<br>${esc(osClienteTxt(os))} • ${esc(osVeiculoTxt(os))} • ${esc(osStatusTxt(os))}<br><small>Ao salvar, o checklist será anexado nessa O.S. do Jarvis.</small>`;
+  } else if(osRef){
+    box.className='notice warn';
+    box.innerHTML=`<b>O.S./referência manual:</b> ${esc(osRef)}<br><small>Para evitar erro, prefira digitar a placa e tocar em “Buscar/selecionar O.S. pela placa”.</small>`;
+  } else {
+    box.className='notice';
+    box.innerHTML='Digite a placa e toque em <b>Buscar/selecionar O.S. pela placa</b>. O mecânico não precisa decorar número de O.S.';
+  }
+}
+function selecionarOS(id){
+  const os=(state.history.os||[]).find(o=>String(o.id)===String(id));
+  if(!os) return toast('Não encontrei essa O.S. na lista carregada.');
+  state.osSelecionada={...os, label:osIdent(os)};
+  const placa=placaNorm(os.placa||os.placaNorm||os.veiculo?.placa||os.veiculoSnapshot?.placa||$('placa')?.value||'');
+  if(placa && $('placa')) $('placa').value=placa;
+  if($('osRef')) $('osRef').value=osIdent(os)||os.id||'';
+  const km=osKmTxt(os); if(km && $('km') && !$('km').value) $('km').value=km;
+  const relato=String(os.relato||os.descricao||os.desc||os.diagnostico||'').trim(); if(relato && $('relato') && !$('relato').value) $('relato').value=relato.slice(0,500);
+  saveDraft(); renderOSSelecionadaInfo(); renderHistorico(); toast('O.S. selecionada. Agora preencha o checklist e salve.');
+}
+
+async function buscarHistorico(){
+  const placa=placaNorm($('placa').value); if(!placa){ toast('Informe a placa.'); return; }
+  $('placa').value=placa; setBusy('btnHistorico',true,'Buscando...');
+  const db=activeDb(); const out={os:[],checklists:[],entregas:[]};
+  async function queryMany(col, fields){
+    const res=[]; const seen=new Set();
+    for(const f of fields){ try{ const snap=await db.collection(col).where(f,'==',placa).limit(15).get(); snap.docs.forEach(d=>{ if(!seen.has(d.id)){ seen.add(d.id); res.push({id:d.id,_col:col,...d.data()}); } }); }catch(e){ console.warn('hist',col,f,e.message); } }
+    return res;
+  }
+  try{
+    out.os = await queryMany('ordens_servico',['placa','placaNorm','veiculo.placa','dadosVeiculo.placa']);
+    if(!out.os.length) out.os = await queryMany('ordensServico',['placa','placaNorm','veiculo.placa']);
+    out.checklists = await queryMany('checklists',['placa','placaNorm']);
+    out.entregas = await queryMany('checklistsEntrega',['placa','placaNorm']);
+    out.os.sort((a,b)=>Number(osAberta(b))-Number(osAberta(a)) || new Date(osDataVal(b)||0)-new Date(osDataVal(a)||0));
+    state.history=out; renderHistorico();
+  }catch(e){ console.warn(e); toast('Histórico indisponível. Checklist continua funcionando.'); }
+  finally{ setBusy('btnHistorico',false); saveDraft(); }
+}
+function renderHistorico(){
+  const box=$('historicoBox'); if(!box) return;
+  const {os,checklists,entregas}=state.history;
+  const html=[];
+  html.push(`<div class="notice"><b>Histórico da placa ${esc(placaNorm($('placa').value))}</b><br>O.S.: ${os.length} • Checklists: ${checklists.length} • Entregas: ${entregas.length}</div>`);
+  os.slice(0,12).forEach(o=>{ const sel=state.osSelecionada && String(state.osSelecionada.id)===String(o.id); html.push(`<div class="hist"><b>${sel?'✅ ':''}O.S. ${esc(osIdent(o)||o.id)} ${osAberta(o)?'<span class="pill ok">Aberta</span>':'<span class="pill">Histórica</span>'}</b><small>${esc(osClienteTxt(o))} • ${esc(osVeiculoTxt(o))} • ${esc(osStatusTxt(o))} • ${fmtDateTime(osDataVal(o))}</small><div class="actions"><button class="btn ok small" data-select-os="${esc(o.id)}" type="button">🔗 Usar esta O.S.</button><button class="btn secondary small" data-copy-os="${esc(osIdent(o)||o.id)}" type="button">Copiar nº</button></div></div>`); });
+  checklists.slice(0,8).forEach(c=>{ const st=checklistStatusOf(c); const pct=checklistProgress(c); html.push(`<div class="hist"><b>Checklist ${esc(c.id)} <span class="pill ${st==='concluido'?'ok':'warn'}">${esc(checklistStatusLabel(c))}</span></b><small>${fmtDateTime(c.atualizadoEm||c.criadoEm||c.createdAt)} • ${esc(c.responsavel||c.mecanico||'')} • ${pct}% • Pendentes: ${onlyFinite(c.stats?.pending??c.itensPendentes)}</small><div class="actions"><button class="btn ${st==='em_producao'?'warn':'secondary'} small" data-load-hist="${esc(c.id)}" type="button">${st==='em_producao'?'▶ Continuar':'✏️ Editar'}</button><button class="btn secondary small" data-pdf-team-hist="${esc(c.id)}" type="button">📄 PDF equipe</button><button class="btn secondary small" data-pdf-hist="${esc(c.id)}" type="button">📋 PDF técnico</button>${isGestor()?`<button class="btn bad small" data-del-check="${esc(c.id)}" data-col="${esc(c._col||'checklists')}" type="button">🗑️ Excluir</button>`:''}</div></div>`); });
+  box.innerHTML=html.join('');
+  $$('[data-select-os]',box).forEach(b=>b.addEventListener('click',()=>selecionarOS(b.dataset.selectOs)));
+  $$('[data-copy-os]',box).forEach(b=>b.addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(b.dataset.copyOs||''); toast('Número da O.S. copiado.'); }catch(e){ toast('O.S.: '+(b.dataset.copyOs||'')); } }));
+  $$('[data-del-check]',box).forEach(b=>b.addEventListener('click',()=>deleteChecklist(b.dataset.col,b.dataset.delCheck)));
+  $$('[data-load-hist]',box).forEach(b=>b.addEventListener('click',()=>loadChecklistFromList(state.history.checklists,b.dataset.loadHist)));
+  $$('[data-pdf-team-hist]',box).forEach(b=>b.addEventListener('click',()=>{ const c=(state.history.checklists||[]).find(x=>x.id===b.dataset.pdfTeamHist); if(c) gerarPDFEquipe(c); }));
+  $$('[data-pdf-hist]',box).forEach(b=>b.addEventListener('click',()=>{ const c=(state.history.checklists||[]).find(x=>x.id===b.dataset.pdfHist); if(c) gerarPDF(c); }));
+}
+async function deleteChecklist(col,id){
+  if(!isGestor()) return toast('Somente gestor/gerente/admin pode excluir.');
+  if(!id) return toast('Nenhum checklist salvo selecionado.');
+  if(!confirm('Excluir checklist salvo? A O.S. não será apagada.')) return;
+  try{
+    await activeDb().collection(col||'checklists').doc(id).delete();
+    if(state.lastSavedId===id){ state.lastSavedId=''; state.currentCreatedAt=''; state.currentFinalizedAt=''; saveDraft(); }
+    state.consulta=state.consulta.filter(x=>x.id!==id);
+    if(placaNorm($('placa')?.value||'')) await buscarHistorico();
+    renderConsulta(); renderResumo();
+    toast('Checklist excluído.');
+  }catch(e){ console.warn(e); toast('Firebase não permitiu excluir. Confira regras de gestor.'); }
+}
 async function deleteCurrentChecklist(){
   if(!state.lastSavedId) return toast('Este checklist ainda não foi salvo no Firebase.');
   await deleteChecklist('checklists', state.lastSavedId);
