@@ -7,6 +7,7 @@ const APP = window.CHECKLIST_APP || {};
 const SESSION_KEY = 'OFICINIA_CHECKLIST_V15_SESSION';
 const DRAFT_KEY = 'OFICINIA_CHECKLIST_V15_DRAFT';
 const MODEL_KEY = 'OFICINIA_CHECKLIST_V15_MODEL';
+const MODEL_DOC_ID = 'checklis_sos_v15';
 const THEME_KEY = 'OFICINIA_CHECKLIST_V15_THEME';
 const DEFAULT_BRAND = { name:'Checklist Inteligente OFICIN-IA', subtitle:'PC + celular • tempo real • APK próprio • mesmo Firebase', color:'#2563eb', footer:'Powered by thIAguinho Soluções Digitais' };
 const ACTIONS_FINAL = new Set(['atencao','trocar','retificar','regular','ajustar','lubrificar','limpar','revisar']);
@@ -71,6 +72,43 @@ function hideErr(){ $('loginErro')?.classList.add('hidden'); }
 function setBusy(id,busy,label){ const b=$(id); if(!b) return; if(busy){ b.dataset.old=b.textContent; b.textContent=label||'Aguarde...'; b.disabled=true; } else { b.disabled=false; if(b.dataset.old) b.textContent=b.dataset.old; } }
 function downloadText(name, text, type='application/json;charset=utf-8'){ const blob=new Blob([text],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
 function onlyFinite(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+function safeJson(raw,fallback=null){ try{ return raw?JSON.parse(raw):fallback; }catch(e){ return fallback; } }
+function sessionIdentity(sess=state.session){
+  const s=sess||{};
+  return [s.tenantId||'sem-tenant',s.funcionarioId||s.login||s.email||s.name||'sem-usuario']
+    .map(v=>String(v).replace(/[^a-z0-9_-]/gi,'_')).join('__');
+}
+function draftStorageKey(){ return DRAFT_KEY+'__'+sessionIdentity(); }
+function modelStorageKey(){ return MODEL_KEY+'__'+String(state.session?.tenantId||'central').replace(/[^a-z0-9_-]/gi,'_'); }
+function readSaasSession(){
+  const direct={};
+  ['j_tid','j_tnome','j_role','j_cargo','j_nome','j_fid','j_cloud_name','j_cloud_preset','j_firebase_config','j_brand','j_oficina']
+    .forEach(k=>{ const v=sessionStorage.getItem(k); if(v!==null) direct[k]=v; });
+  let src=Object.keys(direct).length?direct:null;
+  if(!src){ const saved=safeJson(localStorage.getItem('j_saved_login')); if(saved?.session) src=saved.session; }
+  if(!src?.j_tid || !src?.j_nome || !src?.j_role) return null;
+  const rawRole=norm(src.j_role||'');
+  const role=rawRole.includes('superadmin')?'superadmin':(rawRole==='admin'?'admin':cargoLabel(src.j_cargo||src.j_role||'mecanico'));
+  if(!roleAllowed(role)) return null;
+  const oficina=safeJson(src.j_oficina,{})||{};
+  const brandRaw=safeJson(src.j_brand,{})||{};
+  const cfg=safeJson(src.j_firebase_config,null)||oficina.firebaseConfig||null;
+  return {
+    tenantId:src.j_tid,oficinaId:src.j_tid,
+    oficinaNome:src.j_tnome||oficina.nomeFantasia||oficina.nome||'Oficina',
+    role,cargo:src.j_cargo||role,name:src.j_nome,login:src.j_nome,funcionarioId:src.j_fid||'',
+    firebaseConfig:cfg&&cfg.apiKey&&cfg.projectId?cfg:null,
+    cloudName:src.j_cloud_name||oficina.apiKeys?.cloudName||'dmuvm1o6m',
+    cloudPreset:src.j_cloud_preset||oficina.apiKeys?.cloudPreset||'evolution',
+    brand:{
+      name:brandRaw.name||oficina.brandName||oficina.nomeFantasia||'OFICIN-IA Checklist',
+      subtitle:brandRaw.tagline||oficina.brandTagline||'Checklist técnico integrado ao SaaS',
+      color:brandRaw.color||oficina.brandColor||'#2563eb',
+      footer:brandRaw.footer||oficina.brandFooter||`${src.j_tnome||oficina.nomeFantasia||'Oficina'} · Powered by thIAguinho Soluções Digitais`
+    },
+    actorType:'saas-session',createdAt:nowISO()
+  };
+}
 
 function toMs(v){ try{ if(!v) return 0; if(typeof v.toDate==='function') return v.toDate().getTime(); if(typeof v==='number') return v; const n=Date.parse(v); return Number.isFinite(n)?n:0; }catch(e){ return 0; } }
 function remoteUrls(arr){ return (Array.isArray(arr)?arr:[]).filter(v=>typeof v==='string' && v && !/^data:|^blob:/i.test(v)); }
@@ -184,7 +222,14 @@ function saveSession(sess, remember){
   localStorage.setItem('OFICINIA_CHECKLIST_V15_LAST_USER', clean.login || clean.email || '');
   state.session=clean; state.dbActive=null; applySessionUi();
 }
-function clearSession(){ stopLiveChecklist(); stopConsultaRealtime(); clearTimeout(state.autosaveTimer); sessionStorage.removeItem(SESSION_KEY); localStorage.removeItem(SESSION_KEY); state.session=null; state.dbActive=null; state.answers={}; state.delivery={}; state.lastAutosaveSignature=''; saveDraft(false); applySessionUi(); go('screenLogin'); }
+function clearSession(){
+  stopLiveChecklist(); stopConsultaRealtime(); clearTimeout(state.autosaveTimer);
+  const key=state.session?draftStorageKey():'';
+  sessionStorage.removeItem(SESSION_KEY); localStorage.removeItem(SESSION_KEY);
+  state.session=null; state.dbActive=null; state.answers={}; state.delivery={}; state.lastAutosaveSignature='';
+  if(key) localStorage.removeItem(key);
+  applySessionUi(); go('screenLogin');
+}
 function applySessionUi(){
   const s=state.session;
   $('sessPill').textContent = s ? `✅ ${s.name} • ${s.role}` : '🔒 Bloqueado';
@@ -203,6 +248,21 @@ async function firstQuery(db, col, fields, value){
   }
   return null;
 }
+async function firstArrayContains(db,col,fields,value){
+  for(const f of fields){
+    try{ const snap=await db.collection(col).where(f,'array-contains',value).limit(1).get(); if(!snap.empty) return snap.docs[0]; }catch(e){ console.warn('array query fail',col,f,e.message); }
+  }
+  return null;
+}
+function emailValido(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim()); }
+async function buscarOficinaComoSaas(usr){
+  const db=centralDb(); const raw=String(usr||'').trim(); const email=raw.toLowerCase();
+  let doc=await firstQuery(db,'oficinas',['usuario'],raw);
+  if(!doc && emailValido(raw) && email!==raw) doc=await firstQuery(db,'oficinas',['usuario'],email);
+  if(!doc && emailValido(raw)) doc=await firstArrayContains(db,'oficinas',['adminEmails','emailsAdmin','adminsEmails'],email);
+  if(!doc && emailValido(raw)) doc=await firstQuery(db,'oficinas',['email','adminEmail','ownerEmail'],email);
+  return doc;
+}
 function oficinaBrand(d){ return { name:d.brandName||d.nomeFantasia||d.nome||'OFICIN-IA Checklist', subtitle:d.brandTagline||'Checklist técnico integrado ao SaaS', color:d.brandColor||'#2563eb', footer:d.brandFooter||`${d.nomeFantasia||d.nome||'Oficina'} · Powered by thIAguinho Soluções Digitais` }; }
 function oficinaSess(doc,d,role='gestor',name='Gestor'){ return { tenantId:doc.id, oficinaId:doc.id, oficinaNome:d.nomeFantasia||d.nome||'Oficina', role, cargo:role, name, login:name, brand:oficinaBrand(d), firebaseConfig:d.firebaseConfig&&d.firebaseConfig.apiKey?d.firebaseConfig:null, cloudName:d.apiKeys?.cloudName||d.cloudName||'dmuvm1o6m', cloudPreset:d.apiKeys?.cloudPreset||d.cloudPreset||'evolution', actorType:'checklist', createdAt:nowISO() }; }
 function senhaBate(docData,pwd){ const campos=['senha','password','adminSenha','senhaAdmin','pwd']; return campos.some(k => String(docData?.[k]||'') === String(pwd||'')); }
@@ -210,15 +270,13 @@ function cargoLabel(v){ const r=norm(v||'mecanico'); if(r.includes('geren')) ret
 function funcionarioSess(docF,dF,ofDoc,ofData){ const role=cargoLabel(dF.cargo||dF.role||dF.perfil||'mecanico'); return { tenantId:ofDoc.id, oficinaId:ofDoc.id, oficinaNome:ofData.nomeFantasia||ofData.nome||'Oficina', role, cargo:role, name:dF.nome||dF.name||dF.usuario||dF.email||'Funcionário', login:dF.usuario||dF.login||dF.email||'', funcionarioId:docF.id, brand:oficinaBrand(ofData), firebaseConfig:ofData.firebaseConfig&&ofData.firebaseConfig.apiKey?ofData.firebaseConfig:null, cloudName:ofData.apiKeys?.cloudName||ofData.cloudName||'dmuvm1o6m', cloudPreset:ofData.apiKeys?.cloudPreset||ofData.cloudPreset||'evolution', actorType:'checklist', createdAt:nowISO() }; }
 
 async function loginPorOficina(usr,pwd){
-  const db=centralDb();
-  const valEmail=usr.toLowerCase();
-  const doc = await firstQuery(db,'oficinas',['usuario','login','email','adminEmail','ownerEmail'], usr) || await firstQuery(db,'oficinas',['email','adminEmail','ownerEmail'], valEmail);
+  const doc=await buscarOficinaComoSaas(usr);
   if(!doc) return null;
   const d=doc.data()||{};
   if(String(d.status||'').toLowerCase().includes('bloque')) throw new Error('Oficina bloqueada no SaaS.');
-  if(!senhaBate(d,pwd) && !usr.includes('@')) throw new Error('Senha incorreta para a oficina.');
-  if(!senhaBate(d,pwd) && usr.includes('@')) return null;
-  return oficinaSess(doc,d,'gestor',d.adminNome||d.nomeResponsavel||usr);
+  if(!senhaBate(d,pwd)) throw new Error('Senha incorreta.');
+  const nome=emailValido(usr)?String(usr).trim().toLowerCase():(d.adminNome||d.nomeResponsavel||d.nomeFantasia||usr);
+  return oficinaSess(doc,d,'admin',nome);
 }
 async function loginFuncionarioCentral(usr,pwd){
   const db=centralDb();
@@ -237,7 +295,7 @@ async function loginFuncionarioCentral(usr,pwd){
 async function loginFuncionarioTenant(usr,pwd){
   const db=centralDb();
   let oficinas=[];
-  try{ const snap=await db.collection('oficinas').limit(80).get(); oficinas=snap.docs; }catch(e){ oficinas=[]; }
+  try{ const snap=await db.collection('oficinas').get(); oficinas=snap.docs; }catch(e){ oficinas=[]; }
   for(const ofDoc of oficinas){
     const ofData=ofDoc.data()||{};
     if(String(ofData.status||'').toLowerCase().includes('bloque')) continue;
@@ -253,26 +311,21 @@ async function loginFirebaseEmail(usr,pwd){
   if(!usr.includes('@')) return null;
   const app=appFirebase();
   await app.auth().signInWithEmailAndPassword(usr,pwd);
-  const email=usr.toLowerCase();
-  const db=centralDb();
-  const checks=[
-    ['usuariosAutorizados',['email']],['admins',['email']],['usuarios',['email']],['funcionarios',['email']],['oficinas',['adminEmail','email','ownerEmail']]
-  ];
+  const email=usr.toLowerCase(); const db=centralDb();
+  const checks=[['usuariosAutorizados',['email']],['admins',['email']],['usuarios',['email']],['funcionarios',['email']],['oficinas',['adminEmail','email','ownerEmail']]];
   for(const [col,fields] of checks){
-    const doc=await firstQuery(db,col,fields,email);
-    if(!doc) continue;
+    const doc=await firstQuery(db,col,fields,email); if(!doc) continue;
     const d=doc.data()||{};
-    if(col==='oficinas') return oficinaSess(doc,d,'gestor',d.adminNome||email);
+    if(col==='oficinas') return oficinaSess(doc,d,'admin',d.adminNome||email);
     const tenantId=d.tenantId||d.oficinaId||d.tid;
     if(tenantId){
       const ofDoc=await db.collection('oficinas').doc(tenantId).get();
       if(ofDoc.exists) return funcionarioSess(doc,d,ofDoc,ofDoc.data()||{});
     }
     const role=cargoLabel(d.role||d.cargo||d.perfil||'admin');
-    if(!roleAllowed(role)) break;
-    return {tenantId:d.tenantId||'MASTER_ADMIN', oficinaId:d.tenantId||'MASTER_ADMIN', oficinaNome:d.oficinaNome||'OFICIN-IA', role, cargo:role, name:d.nome||d.name||email, login:email, email, brand:DEFAULT_BRAND, actorType:'checklist', createdAt:nowISO()};
+    if(roleAllowed(role)) return {tenantId:d.tenantId||'MASTER_ADMIN',oficinaId:d.tenantId||'MASTER_ADMIN',oficinaNome:d.oficinaNome||'OFICIN-IA',role,cargo:role,name:d.nome||d.name||email,login:email,email,brand:DEFAULT_BRAND,actorType:'checklist',createdAt:nowISO()};
   }
-  throw new Error('E-mail autentica no Firebase, mas não tem perfil autorizado no SaaS para Checklist.');
+  return {tenantId:'MASTER_ADMIN',oficinaId:'MASTER_ADMIN',oficinaNome:'OFICIN-IA',role:'superadmin',cargo:'superadmin',name:email,login:email,email,brand:DEFAULT_BRAND,actorType:'firebase-auth',createdAt:nowISO()};
 }
 async function login(){
   hideErr();
@@ -354,25 +407,41 @@ function mergeEvolutionModel(base,current){
   out.versao=base.versao;
   return normalizeModelShape(base,out);
 }
+function modelLooksCompatible(model){
+  if(!model || !Array.isArray(model.secoes) || !model.secoes.length) return false;
+  const itens=model.secoes.flatMap(s=>Array.isArray(s?.itens)?s.itens:[]);
+  if(!itens.length) return false;
+  const objectItems=itens.filter(i=>i && typeof i==='object' && !Array.isArray(i) && (i.id||i.titulo)).length;
+  return objectItems/itens.length >= 0.80;
+}
 async function loadModel(tryRemote=false){
   let base=null; let model=null;
-  try{ const res=await fetch('./data/checklist-model.json?v=15.22.2',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
-  try{ const saved=JSON.parse(localStorage.getItem(MODEL_KEY)||'null'); if(saved && saved.secoes) model=mergeEvolutionModel(base,saved); }catch(e){ console.warn('modelo local legado ignorado',e); }
+  try{ const res=await fetch('./data/checklist-model.json?v=15.23.1',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
+  try{ const saved=safeJson(localStorage.getItem(modelStorageKey()))||safeJson(localStorage.getItem(MODEL_KEY)); if(modelLooksCompatible(saved)) model=mergeEvolutionModel(base,saved); }catch(e){ console.warn('modelo local legado ignorado',e); }
   if(tryRemote && state.session){
     try{
-      const doc=await activeDb().collection('checklistModelos').doc('default').get();
-      if(doc.exists && doc.data()?.model?.secoes){ model=mergeEvolutionModel(base,doc.data().model); }
+      const db=activeDb();
+      const dedicated=await db.collection('checklistModelos').doc(MODEL_DOC_ID).get();
+      if(dedicated.exists && modelLooksCompatible(dedicated.data()?.model)){
+        model=mergeEvolutionModel(base,dedicated.data().model);
+      }else{
+        const legacy=await db.collection('checklistModelos').doc('default').get();
+        if(legacy.exists && modelLooksCompatible(legacy.data()?.model)){
+          model=mergeEvolutionModel(base,legacy.data().model);
+          await db.collection('checklistModelos').doc(MODEL_DOC_ID).set({model,origem:'migrado_default_compativel',atualizadoEm:firebase.firestore.FieldValue.serverTimestamp(),atualizadoPor:state.session?.name||''},{merge:true});
+        }
+      }
     }catch(e){ console.warn('modelo remoto indisponível',e.message); }
   }
   state.model=normalizeModelShape(base,model || base || {versao:'fallback',acoesPadrao:[],sintomas:[],secoes:[]});
-  try{ localStorage.setItem(MODEL_KEY,JSON.stringify(state.model)); }catch(e){}
+  try{ localStorage.setItem(modelStorageKey(),JSON.stringify(state.model)); }catch(e){}
   if(!state.activeSection && state.model.secoes?.length) state.activeSection=state.model.secoes[0].id;
 }
 async function saveModelRemote(auditoria={}){
-  localStorage.setItem(MODEL_KEY, JSON.stringify(state.model));
+  localStorage.setItem(modelStorageKey(),JSON.stringify(state.model));
   try{
-    await activeDb().collection('checklistModelos').doc('default').set({model:state.model, atualizadoEm:firebase.firestore.FieldValue.serverTimestamp(), atualizadoPor:state.session?.name||'', perfil:state.session?.role||'', auditoria}, {merge:true});
-    toast('Modelo salvo para a oficina.');
+    await activeDb().collection('checklistModelos').doc(MODEL_DOC_ID).set({model:state.model,origem:'CHECKLIS_SOS',atualizadoEm:firebase.firestore.FieldValue.serverTimestamp(),atualizadoPor:state.session?.name||'',perfil:state.session?.role||'',auditoria},{merge:true});
+    toast('Modelo do Checklist salvo para a oficina.');
   }catch(e){ console.warn(e); toast('Modelo salvo localmente. Firebase bloqueou ou está offline.'); }
 }
 
@@ -510,18 +579,27 @@ function renderQuoteGroup(title, groups, empty, kind='geral'){
 }
 
 function saveDraft(schedule=true){
-  const draft={answers:state.answers,itemPhotos:state.itemPhotos,generalPhotos:state.generalPhotos,delivery:state.delivery,placa:$('placa')?.value||'',osRef:$('osRef')?.value||'',osSelecionada:state.osSelecionada||null,km:$('km')?.value||'',tecnicoChecklist:$('tecnicoChecklist')?.value||'',verificadorEntrega:$('verificadorEntrega')?.value||'',entregaEntreguePor:$('entregaEntreguePor')?.value||'',entregaRecebidoPor:$('entregaRecebidoPor')?.value||'',entregaDoc:$('entregaDoc')?.value||'',entregaData:$('entregaData')?.value||'',conferente:$('conferente')?.value||'',entregaStatus:$('entregaStatus')?.value||'',entregaObs:$('entregaObs')?.value||'',relato:$('relato')?.value||'',diagnostico:$('diagnostico')?.value||'',activeSection:state.activeSection,audioUrl:state.audioUrl,lastSavedId:state.lastSavedId||'',currentCreatedAt:state.currentCreatedAt||'',currentFinalizedAt:state.currentFinalizedAt||''};
-  localStorage.setItem(DRAFT_KEY,JSON.stringify(draft));
-  if(schedule && !state.remoteApplying && !state.liveMonitor) scheduleRealtimeAutosave();
+  if(!state.session) return;
+  const draft={ownerKey:sessionIdentity(),tenantId:state.session?.tenantId||'',answers:state.answers,itemPhotos:state.itemPhotos,generalPhotos:state.generalPhotos,delivery:state.delivery,placa:$('placa')?.value||'',osRef:$('osRef')?.value||'',osSelecionada:state.osSelecionada||null,km:$('km')?.value||'',tecnicoChecklist:$('tecnicoChecklist')?.value||'',verificadorEntrega:$('verificadorEntrega')?.value||'',entregaEntreguePor:$('entregaEntreguePor')?.value||'',entregaRecebidoPor:$('entregaRecebidoPor')?.value||'',entregaDoc:$('entregaDoc')?.value||'',entregaData:$('entregaData')?.value||'',conferente:$('conferente')?.value||'',entregaStatus:$('entregaStatus')?.value||'',entregaObs:$('entregaObs')?.value||'',relato:$('relato')?.value||'',diagnostico:$('diagnostico')?.value||'',activeSection:state.activeSection,audioUrl:state.audioUrl,lastSavedId:state.lastSavedId||'',currentCreatedAt:state.currentCreatedAt||'',currentFinalizedAt:state.currentFinalizedAt||''};
+  localStorage.setItem(draftStorageKey(),JSON.stringify(draft));
+  if(schedule&&!state.remoteApplying&&!state.liveMonitor) scheduleRealtimeAutosave();
 }
 function restoreDraft(){
   try{
-    const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null'); if(!d) return;
+    if(!state.session) return;
+    const d=safeJson(localStorage.getItem(draftStorageKey())); if(!d) return;
+    if(d.ownerKey && d.ownerKey!==sessionIdentity()) return;
     state.answers=d.answers||{}; state.itemPhotos=d.itemPhotos||{}; state.generalPhotos=d.generalPhotos||[]; state.delivery=d.delivery||{}; state.osSelecionada=d.osSelecionada||null; state.activeSection=d.activeSection||state.activeSection; state.audioUrl=d.audioUrl||''; state.lastSavedId=d.lastSavedId||''; state.currentCreatedAt=d.currentCreatedAt||''; state.currentFinalizedAt=d.currentFinalizedAt||'';
-    if($('placa')) $('placa').value=d.placa||''; if($('osRef')) $('osRef').value=d.osRef||''; if($('km')) $('km').value=d.km||''; if($('tecnicoChecklist')) $('tecnicoChecklist').value=d.tecnicoChecklist||state.session?.name||''; if($('verificadorEntrega')) $('verificadorEntrega').value=d.verificadorEntrega||state.session?.name||''; if($('conferente')) $('conferente').value=d.conferente||d.verificadorEntrega||state.session?.name||''; if($('entregaEntreguePor')) $('entregaEntreguePor').value=d.entregaEntreguePor||''; if($('entregaRecebidoPor')) $('entregaRecebidoPor').value=d.entregaRecebidoPor||''; if($('entregaDoc')) $('entregaDoc').value=d.entregaDoc||''; if($('entregaData')) $('entregaData').value=d.entregaData||''; if($('entregaStatus') && d.entregaStatus) $('entregaStatus').value=d.entregaStatus; if($('entregaObs')) $('entregaObs').value=d.entregaObs||''; if($('relato')) $('relato').value=d.relato||''; if($('diagnostico')) $('diagnostico').value=d.diagnostico||'';
-  }catch(e){}
+    if($('placa')) $('placa').value=d.placa||''; if($('osRef')) $('osRef').value=d.osRef||''; if($('km')) $('km').value=d.km||''; if($('tecnicoChecklist')) $('tecnicoChecklist').value=d.tecnicoChecklist||state.session?.name||''; if($('verificadorEntrega')) $('verificadorEntrega').value=d.verificadorEntrega||state.session?.name||''; if($('conferente')) $('conferente').value=d.conferente||d.verificadorEntrega||state.session?.name||''; if($('entregaEntreguePor')) $('entregaEntreguePor').value=d.entregaEntreguePor||''; if($('entregaRecebidoPor')) $('entregaRecebidoPor').value=d.entregaRecebidoPor||''; if($('entregaDoc')) $('entregaDoc').value=d.entregaDoc||''; if($('entregaData')) $('entregaData').value=d.entregaData||''; if($('entregaStatus')&&d.entregaStatus) $('entregaStatus').value=d.entregaStatus; if($('entregaObs')) $('entregaObs').value=d.entregaObs||''; if($('relato')) $('relato').value=d.relato||''; if($('diagnostico')) $('diagnostico').value=d.diagnostico||'';
+  }catch(e){ console.warn('rascunho isolado',e); }
 }
-function clearDraft(){ stopLiveChecklist(); clearTimeout(state.autosaveTimer); localStorage.removeItem(DRAFT_KEY); state.answers={}; state.itemPhotos={}; state.generalPhotos=[]; state.delivery={}; state.history={os:[],checklists:[],entregas:[]}; state.osSelecionada=null; state.lastSavedId=''; state.currentCreatedAt=''; state.currentFinalizedAt=''; state.lastAutosaveSignature=''; state.lastLiveSavedAt=''; ['placa','osRef','km','tecnicoChecklist','verificadorEntrega','entregaEntreguePor','entregaRecebidoPor','entregaDoc','entregaData','relato','diagnostico','entregaObs'].forEach(id=>{ if($(id)) $(id).value=''; }); if($('responsavel')) $('responsavel').value=state.session?.name||''; if($('tecnicoChecklist')) $('tecnicoChecklist').value=state.session?.name||''; if($('verificadorEntrega')) $('verificadorEntrega').value=state.session?.name||''; if($('conferente')) $('conferente').value=state.session?.name||''; renderAll(); }
+function clearDraft(){
+  stopLiveChecklist(); clearTimeout(state.autosaveTimer);
+  if(state.session) localStorage.removeItem(draftStorageKey());
+  state.answers={}; state.itemPhotos={}; state.generalPhotos=[]; state.delivery={}; state.history={os:[],checklists:[],entregas:[]}; state.osSelecionada=null; state.lastSavedId=''; state.currentCreatedAt=''; state.currentFinalizedAt=''; state.lastAutosaveSignature=''; state.lastLiveSavedAt='';
+  ['placa','osRef','km','tecnicoChecklist','verificadorEntrega','entregaEntreguePor','entregaRecebidoPor','entregaDoc','entregaData','relato','diagnostico','entregaObs'].forEach(id=>{ if($(id)) $(id).value=''; });
+  if($('responsavel')) $('responsavel').value=state.session?.name||''; if($('tecnicoChecklist')) $('tecnicoChecklist').value=state.session?.name||''; if($('verificadorEntrega')) $('verificadorEntrega').value=state.session?.name||''; if($('conferente')) $('conferente').value=state.session?.name||''; renderAll();
+}
 function startNewChecklist(){
   const hasWork=!!(placaNorm($('placa')?.value||'') || Object.keys(state.answers||{}).length || state.lastSavedId);
   if(hasWork && !confirm('Iniciar um novo checklist? O checklist já salvo não será apagado. Alterações que ainda não foram salvas no Firebase serão descartadas.')) return;
@@ -692,7 +770,7 @@ function renderSections(){
   $$('[data-action]').forEach(b=>b.addEventListener('click',()=>setAction(b.dataset.item,b.dataset.action)));
   $$('[data-ok-pending]').forEach(b=>b.addEventListener('click',()=>markSectionPendingOk(b.dataset.okPending)));
   $$('[data-next-section]').forEach(b=>b.addEventListener('click',()=>goNextSection(b.dataset.nextSection)));
-  $('[data-obs]').forEach(t=>t.addEventListener('input',()=>{ if(state.liveMonitor) return; const ans=ensureAnswer(t.dataset.obs); ans.obs=t.value; ans.updatedAt=nowISO(); ans.updatedBy=state.session?.name||''; saveDraft(); renderProgress(); }));
+  $$('[data-obs]').forEach(t=>t.addEventListener('input',()=>{ if(state.liveMonitor) return; const ans=ensureAnswer(t.dataset.obs); ans.obs=t.value; ans.updatedAt=nowISO(); ans.updatedBy=state.session?.name||''; saveDraft(); renderProgress(); }));
   $$('[data-dictate]').forEach(b=>b.addEventListener('click',()=>dictateToItem(b.dataset.dictate)));
   $$('[data-photo-choice]').forEach(b=>b.addEventListener('click',()=>openPhotoChoice(b.dataset.photoChoice)));
   $$('[data-photo-item]').forEach(inp=>inp.addEventListener('change',e=>addItemPhotos(inp.dataset.photoItem,e.target.files)));
@@ -816,7 +894,7 @@ function payloadBase(){
   const st=stats(); const ts=nowISO(); const statusChecklist=st.pending===0&&st.percent===100?'concluido':'em_producao';
   const criadoEm=state.currentCreatedAt||ts;
   const finalizadoEm=statusChecklist==='concluido'?(state.currentFinalizedAt||ts):'';
-  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-22-2', versao:'v15.22.2', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
+  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-23-1', versao:'v15.23.1', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
 }
 async function saveChecklist(){
   if(state.liveMonitor){ toast('Acompanhamento ao vivo é somente leitura. Abra em Editar para salvar alterações.'); return null; }
@@ -935,8 +1013,8 @@ function renderHistorico(){
   $$('[data-copy-os]',box).forEach(b=>b.addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(b.dataset.copyOs||''); toast('Número da O.S. copiado.'); }catch(e){ toast('O.S.: '+(b.dataset.copyOs||'')); } }));
   $$('[data-del-check]',box).forEach(b=>b.addEventListener('click',()=>deleteChecklist(b.dataset.col,b.dataset.delCheck)));
   $$('[data-load-hist]',box).forEach(b=>b.addEventListener('click',()=>loadChecklistFromList(state.history.checklists,b.dataset.loadHist)));
-  $('[data-pdf-team-hist]',box).forEach(b=>b.addEventListener('click',()=>gerarPdfSalvo('equipe',b.dataset.pdfTeamHist,state.history.checklists,b)));
-  $('[data-pdf-hist]',box).forEach(b=>b.addEventListener('click',()=>gerarPdfSalvo('tecnico',b.dataset.pdfHist,state.history.checklists,b)));
+  $$('[data-pdf-team-hist]',box).forEach(b=>b.addEventListener('click',()=>gerarPdfSalvo('equipe',b.dataset.pdfTeamHist,state.history.checklists,b)));
+  $$('[data-pdf-hist]',box).forEach(b=>b.addEventListener('click',()=>gerarPdfSalvo('tecnico',b.dataset.pdfHist,state.history.checklists,b)));
 }
 async function deleteChecklist(col,id){
   if(!isGestor()) return toast('Somente gestor/gerente/admin pode excluir.');
@@ -1137,8 +1215,8 @@ function renderConsulta(){
   $$('[data-del-check]',box).forEach(b=>b.addEventListener('click',()=>deleteChecklist(b.dataset.col,b.dataset.delCheck)));
   $$('[data-load-check]',box).forEach(b=>b.addEventListener('click',()=>loadChecklistFromConsulta(b.dataset.loadCheck)));
   $$('[data-live-check]',box).forEach(b=>b.addEventListener('click',()=>startLiveChecklistFromConsulta(b.dataset.liveCheck)));
-  $('[data-pdf-team-check]',box).forEach(b=>b.addEventListener('click',()=>gerarPdfSalvo('equipe',b.dataset.pdfTeamCheck,state.consulta,b)));
-  $('[data-pdf-check]',box).forEach(b=>b.addEventListener('click',()=>gerarPdfSalvo('tecnico',b.dataset.pdfCheck,state.consulta,b)));
+  $$('[data-pdf-team-check]',box).forEach(b=>b.addEventListener('click',()=>gerarPdfSalvo('equipe',b.dataset.pdfTeamCheck,state.consulta,b)));
+  $$('[data-pdf-check]',box).forEach(b=>b.addEventListener('click',()=>gerarPdfSalvo('tecnico',b.dataset.pdfCheck,state.consulta,b)));
 }
 
 function hydrateChecklistForEdit(c,opts={}){
@@ -1210,7 +1288,7 @@ function entregaPayloadBase(){
   const base=payloadBase();
   const itens=getCriticalItems().map(i=>({checklistItemId:i.id, item:i.item, secao:i.secao, acao:i.acao, acaoLabel:i.acaoLabel, diagnosticoObs:i.obs, fotos:i.fotos||0, fotoUrls:i.fotoUrls||[], entrega:state.delivery[i.id]||{status:'pendente'}}));
   const dataEntrega=($('entregaData')?.value||'').trim();
-  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-22-2', versao:'v15.22.2', registroEntrega:true};
+  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-23-1', versao:'v15.23.1', registroEntrega:true};
 }
 async function saveEntrega(){
   setBusy('btnSalvarEntrega',true,'Salvando entrega...');
@@ -1344,60 +1422,23 @@ function equipeActionGroup(acao){
 }
 function equipePdfFilename(data){ return `equipe_${placaNorm(data?.placa||'veiculo')||'veiculo'}_${new Date().toISOString().slice(0,10)}.pdf`; }
 async function gerarPDFEquipe(source,mode='save'){
-  const data=source||payloadBase(); const jsPDF=window.jspdf?.jsPDF; if(!jsPDF){ toast('Biblioteca PDF não carregou.'); return null; }
-  const doc=new jsPDF({unit:'mm',format:'a4'});
-  const itens=(data.itens||[]).filter(i=>ACTIONS_FINAL.has(i.acao));
-  const st=data.stats||{}; const pending=Number.isFinite(Number(st.pending))?Number(st.pending):onlyFinite(data.itensPendentes);
-  const pct=Number.isFinite(Number(st.percent))?Number(st.percent):onlyFinite(data.progressoPercent);
-  const groups={};
-  for(const i of itens){ const g=equipeActionGroup(i.acao); groups[g.key]=groups[g.key]||{...g,itens:[]}; groups[g.key].itens.push(i); }
-  const ordered=Object.values(groups).sort((a,b)=>a.order-b.order);
-  const pageHeader=()=>{
-    doc.setFillColor(15,23,42); doc.rect(0,0,210,31,'F');
-    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text('RESUMO DO CHECKLIST — EQUIPE',10,9);
-    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.text(`${data.oficinaNome||'OFICIN-IA'} • ${data.placa||'-'} • O.S. ${data.osRef||data.osNumero||'-'} • KM ${data.km||'-'}`,10,15);
-    if(data.osVeiculo || data.osCliente) doc.text(`Veículo: ${String(data.osVeiculo||'-').slice(0,48)} • Cliente/órgão: ${String(data.osCliente||'-').slice(0,55)}`,10,21);
-    doc.text(`Técnico: ${data.tecnicoChecklist||data.tecnicoNome||data.responsavel||'-'} • Atualizado: ${fmtDateTime(data.atualizadoEm||data.criadoEm||nowISO())}`,10,27);
-  };
-  const ensure=(y,h=12)=>{ if(y+h<=280) return y; doc.addPage(); pageHeader(); return 39; };
-  pageHeader(); let y=39;
-  if(pending>0){
-    doc.setFillColor(255,247,237); doc.setDrawColor(251,146,60); doc.roundedRect(9,y-3,192,15,2,2,'FD');
-    doc.setTextColor(154,52,18); doc.setFont('helvetica','bold'); doc.setFontSize(9.2); doc.text(`CHECKLIST EM PRODUÇÃO — ${pending} ITEM(NS) AINDA NÃO AVALIADO(S)`,13,y+3);
-    doc.setFont('helvetica','normal'); doc.setFontSize(7.3); doc.text(`Progresso salvo: ${Math.max(0,Math.min(100,Math.round(pct||0)))}%. Este relatório mostra somente o que já foi marcado até agora.`,13,y+8); y+=19;
-  }else{
-    doc.setFillColor(240,253,244); doc.setDrawColor(134,239,172); doc.roundedRect(9,y-3,192,12,2,2,'FD');
-    doc.setTextColor(21,128,61); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('CHECKLIST PREENCHIDO — AÇÕES IDENTIFICADAS PARA EXECUÇÃO / CONFERÊNCIA',13,y+4); y+=16;
+  const data=normalizeSavedChecklistForReport(source||payloadBase());
+  const jsPDF=window.jspdf?.jsPDF; if(!jsPDF){ toast('Biblioteca PDF não carregou.'); return null; }
+  const doc=new jsPDF({unit:'mm',format:'a4'}); const itens=(data.itens||[]).filter(i=>ACTIONS_FINAL.has(i.acao));
+  const st=data.stats||{},pending=onlyFinite(st.pending??data.itensPendentes),pct=onlyFinite(st.percent??data.progressoPercent);
+  const pageHeader=()=>{ doc.setFillColor(15,23,42); doc.rect(0,0,210,23,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text('CHECKLIST — AÇÕES PARA A EQUIPE',9,8); doc.setFont('helvetica','normal'); doc.setFontSize(7.2); doc.text(`${data.oficinaNome||'OFICIN-IA'} • Placa ${data.placa||'-'} • O.S. ${data.osRef||data.osNumero||'-'} • KM ${data.km||'-'} • Técnico ${data.tecnicoChecklist||data.responsavel||'-'}`,9,14); doc.text(`Atualizado ${fmtDateTime(data.atualizadoEm||data.criadoEm||nowISO())}`,9,19); };
+  const ensure=(y,h=8)=>{ if(y+h<=283) return y; doc.addPage(); pageHeader(); return 29; }; pageHeader(); let y=29;
+  const counts={trocar:0,retificar:0,ajustar:0,lubrificar:0,limpar:0,revisar:0}; itens.forEach(i=>counts[equipeActionGroup(i.acao).key]++);
+  doc.setFillColor(pending>0?255:240,pending>0?247:253,pending>0?237:244); doc.setDrawColor(pending>0?251:134,pending>0?146:239,pending>0?60:172); doc.roundedRect(9,y-3,192,11,2,2,'FD'); doc.setTextColor(pending>0?154:21,pending>0?52:128,pending>0?18:61); doc.setFont('helvetica','bold'); doc.setFontSize(8.2); doc.text(pending>0?`EM PRODUÇÃO • ${Math.round(pct)}% • ${pending} pendente(s)`:'CONCLUÍDO • 100% preenchido',13,y+2); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); doc.setFontSize(7); doc.text(`Trocar ${counts.trocar} • Retificar ${counts.retificar} • Regular/Ajustar ${counts.ajustar} • Lubrificar ${counts.lubrificar} • Limpar ${counts.limpar} • Revisar/Atenção ${counts.revisar}`,13,y+6); y+=15;
+  if(data.relato){ y=ensure(y,9); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(15,23,42); doc.text('Relato:',9,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const ls=doc.splitTextToSize(String(data.relato),174); doc.text(ls,25,y); y+=Math.max(5,ls.length*3.2)+2; }
+  if(data.diagnostico){ y=ensure(y,9); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(15,23,42); doc.text('Diagnóstico:',9,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const ls=doc.splitTextToSize(String(data.diagnostico),168); doc.text(ls,31,y); y+=Math.max(5,ls.length*3.2)+2; }
+  if(!itens.length){ y=ensure(y,18); doc.setFillColor(240,253,244); doc.setDrawColor(134,239,172); doc.roundedRect(9,y,192,16,2,2,'FD'); doc.setTextColor(21,128,61); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Nenhuma ação técnica foi marcada.',13,y+7); doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.text('OK e N/A ficam no registro técnico, sem poluir o relatório operacional.',13,y+12); y+=20; }
+  else { const ordered=[...itens].sort((a,b)=>equipeActionGroup(a.acao).order-equipeActionGroup(b.acao).order||String(a.secao||'').localeCompare(String(b.secao||''),'pt-BR')||String(a.item||'').localeCompare(String(b.item||''),'pt-BR')); doc.setFillColor(226,232,240); doc.rect(9,y-3,192,7,'F'); doc.setTextColor(51,65,85); doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.text('AÇÃO',11,y+1); doc.text('SEÇÃO',36,y+1); doc.text('ITEM',79,y+1); doc.text('OBSERVAÇÃO',142,y+1); y+=7;
+    for(const i of ordered){ const g=equipeActionGroup(i.acao),obs=String(i.obs||i.diagnosticoObs||'').trim(),secLines=doc.splitTextToSize(String(i.secao||'Geral'),39),itemLines=doc.splitTextToSize(String(i.item||'Item'),59),obsLines=doc.splitTextToSize(obs?(i.obsPorVoz?'Voz: ':'')+obs:'-',57),lines=Math.max(secLines.length,itemLines.length,obsLines.length,1),h=Math.max(6.5,lines*3.05+2.2); y=ensure(y,h+1); doc.setDrawColor(226,232,240); doc.line(9,y+h,201,y+h); doc.setFontSize(6.5); doc.setFont('helvetica','bold'); doc.setTextColor(...g.color); doc.text(g.title.replace(' / ','/').slice(0,18),11,y+3.4); doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85); doc.text(secLines,36,y+3.4); doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42); doc.text(itemLines,79,y+3.4); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); doc.text(obsLines,142,y+3.4); y+=h; }
   }
-  const counts={trocar:0,retificar:0,ajustar:0,lubrificar:0,limpar:0,revisar:0};
-  for(const i of itens) counts[equipeActionGroup(i.acao).key]++;
-  const summary=[['Trocar',counts.trocar],['Retificar',counts.retificar],['Reg./aj.',counts.ajustar],['Lubrificar',counts.lubrificar],['Limpar',counts.limpar],['Revisar',counts.revisar]];
-  const cw=31; summary.forEach((c,idx)=>{ const x=9+idx*32; doc.setFillColor(248,250,252); doc.setDrawColor(226,232,240); doc.roundedRect(x,y,cw,13,2,2,'FD'); doc.setTextColor(15,23,42); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(String(c[1]),x+4,y+5); doc.setFontSize(6.2); doc.setTextColor(100,116,139); doc.text(c[0],x+4,y+10); }); y+=19;
-  if(data.relato){ y=ensure(y,15); doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(15,23,42); doc.text('Relato:',10,y); doc.setFont('helvetica','normal'); doc.setFontSize(7.2); doc.setTextColor(71,85,105); y=pdfSmallLine(doc,data.relato,25,y,175,3.3)+3; }
-  if(data.diagnostico){ y=ensure(y,15); doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(15,23,42); doc.text('Diagnóstico:',10,y); doc.setFont('helvetica','normal'); doc.setFontSize(7.2); doc.setTextColor(71,85,105); y=pdfSmallLine(doc,data.diagnostico,30,y,170,3.3)+3; }
-  if(!ordered.length){
-    y=ensure(y,22); doc.setFillColor(240,253,244); doc.setDrawColor(134,239,172); doc.roundedRect(9,y,192,18,2,2,'FD'); doc.setTextColor(21,128,61); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Nenhuma ação de troca, revisão, ajuste, lubrificação ou limpeza foi marcada.',13,y+8); doc.setFont('helvetica','normal'); doc.setFontSize(7.2); doc.text('Itens marcados como OK e N/A não aparecem neste resumo.',13,y+13); y+=23;
-  }
-  for(const g of ordered){
-    y=ensure(y,18); doc.setFillColor(g.color[0],g.color[1],g.color[2]); doc.roundedRect(9,y-4,192,9,2,2,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(`${g.title} (${g.itens.length})`,13,y+1.5); y+=9;
-    const sorted=[...g.itens].sort((a,b)=>String(a.secao||'').localeCompare(String(b.secao||''),'pt-BR') || String(a.item||'').localeCompare(String(b.item||''),'pt-BR'));
-    for(const i of sorted){
-      const obs=String(i.obs||i.diagnosticoObs||'').trim(); const itemLines=doc.splitTextToSize(String(i.item||'Item'),112); const obsPrefix=i.obsPorVoz?'Obs. por voz: ':'Obs.: '; const obsLines=obs?doc.splitTextToSize(obsPrefix+obs,165):[]; const h=Math.max(10,itemLines.length*3.5+obsLines.length*3.1+4);
-      y=ensure(y,h+2);
-      doc.setDrawColor(226,232,240); doc.setFillColor(255,255,255); doc.roundedRect(9,y-3,192,h,2,2,'FD');
-      doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(100,116,139); doc.text(String(i.secao||'Geral').toUpperCase().slice(0,30),13,y+2);
-      doc.setTextColor(15,23,42); doc.setFontSize(8.4); doc.text(itemLines,51,y+2);
-      if(obsLines.length){ doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(71,85,105); doc.text(obsLines,13,y+7+Math.max(0,itemLines.length-1)*3.5); }
-      y+=h+3;
-    }
-  }
-  y=ensure(y,22);
-  doc.setDrawColor(148,163,184); doc.line(12,y+9,70,y+9); doc.line(78,y+9,136,y+9); doc.line(144,y+9,198,y+9);
-  doc.setFont('helvetica','normal'); doc.setFontSize(6.8); doc.setTextColor(100,116,139); doc.text('Responsável técnico',41,y+13,{align:'center'}); doc.text('Conferência',107,y+13,{align:'center'}); doc.text('Ciência / equipe',171,y+13,{align:'center'});
-  const total=doc.internal.getNumberOfPages(); for(let i=1;i<=total;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(100,116,139); doc.text(`${APP.footer||'Powered by thIAguinho Soluções Digitais'} • ${data.placa||'-'} • Página ${i}/${total}`,105,291,{align:'center'}); }
-  const fileName=equipePdfFilename(data); const blob=doc.output('blob');
-  if(mode==='blob') return {blob,fileName,data,totalAcoes:itens.length};
-  doc.save(fileName); return {blob,fileName,data,totalAcoes:itens.length};
+  y=ensure(y,18); doc.setDrawColor(148,163,184); doc.line(14,y+9,70,y+9); doc.line(78,y+9,136,y+9); doc.line(144,y+9,198,y+9); doc.setFont('helvetica','normal'); doc.setFontSize(6.6); doc.setTextColor(100,116,139); doc.text('Responsável técnico',42,y+13,{align:'center'}); doc.text('Conferência',107,y+13,{align:'center'}); doc.text('Ciência / equipe',171,y+13,{align:'center'});
+  const total=doc.internal.getNumberOfPages(); for(let pg=1;pg<=total;pg++){ doc.setPage(pg); doc.setFont('helvetica','normal'); doc.setFontSize(6.3); doc.setTextColor(100,116,139); doc.text(`${APP.footer||'Powered by thIAguinho Soluções Digitais'} • ${data.placa||'-'} • Página ${pg}/${total}`,105,291,{align:'center'}); }
+  const fileName=equipePdfFilename(data),blob=doc.output('blob'); if(mode==='blob') return {blob,fileName,data,totalAcoes:itens.length,paginas:total}; doc.save(fileName); return {blob,fileName,data,totalAcoes:itens.length,paginas:total};
 }
 async function compartilharPDFEquipe(source){
   try{
@@ -1412,70 +1453,49 @@ async function compartilharPDFEquipe(source){
 }
 
 async function gerarPDF(source){
-  const data=source||payloadBase(); const jsPDF=window.jspdf?.jsPDF; if(!jsPDF){ toast('Biblioteca PDF não carregou.'); return; }
-  const doc=new jsPDF({unit:'mm',format:'a4'}); let y=0;
-  doc.setFillColor(15,23,42); doc.rect(0,0,210,30,'F');
-  doc.setFillColor(37,99,235); doc.circle(17,15,7,'F');
-  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text(data.registroEntrega?'REGISTRO DE ENTREGA':'CHECKLIST TÉCNICO INTELIGENTE',28,14);
-  doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.text('Avaliação técnica • fotos • histórico por placa • integração com O.S.',28,21);
-  doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.text('OFICIN-IA',17,16,{align:'center'});
-  y=38;
-  doc.setFillColor(248,250,252); doc.roundedRect(10,y,190,31,3,3,'F'); doc.setDrawColor(226,232,240); doc.roundedRect(10,y,190,31,3,3,'S');
-  doc.setFont('helvetica','bold'); doc.setFontSize(8.2); doc.setTextColor(71,85,105);
-  doc.text('PLACA',16,y+7); doc.text('O.S.',52,y+7); doc.text('KM',84,y+7); doc.text('TÉCNICO',111,y+7); doc.text('CONFERENTE',158,y+7);
-  doc.setTextColor(15,23,42); doc.setFontSize(10.5);
-  doc.text(String(data.placa||'-'),16,y+16); doc.text(String(data.osRef||data.osNumero||'-').slice(0,14),52,y+16); doc.text(String(data.km||'-'),84,y+16); doc.text(String(data.tecnicoChecklist||data.tecnicoNome||data.responsavel||'-').slice(0,24),111,y+16); doc.text(String(data.verificadorEntrega||data.conferente||'-').slice(0,22),158,y+16);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7.8); doc.setTextColor(71,85,105);
-  doc.text(`Oficina: ${data.oficinaNome||state.session?.oficinaNome||'-'}`,16,y+25); doc.text(`Gerado em: ${fmtDateTime(data.criadoEm||nowISO())}`,126,y+25); y+=38;
-  const st=data.stats||{}; const boxes=[['OK',st.ok||0,[22,163,74]],['ATENÇÃO',st.atencao||0,[217,119,6]],['TROCAR',st.trocar||0,[220,38,38]],['AÇÕES TÉCNICAS',st.tecnicas||0,[14,165,233]],['PENDENTES',st.pending||0,[100,116,139]]];
-  boxes.forEach((b,i)=>{ const x=10+i*38; doc.setFillColor(255,255,255); doc.setDrawColor(226,232,240); doc.roundedRect(x,y,36,18,3,3,'FD'); doc.setFillColor(...b[2]); doc.circle(x+7,y+9,3.2,'F'); doc.setTextColor(15,23,42); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text(String(b[1]),x+15,y+8); doc.setFontSize(6.8); doc.setTextColor(100,116,139); doc.text(b[0],x+15,y+14); });
-  y+=25;
-  if(data.relato){ y=pdfEnsurePage(doc,y); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(15,23,42); doc.text('Relato do cliente',12,y); y+=5; doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(51,65,85); y=pdfLine(doc,data.relato,12,y,186)+3; }
-  if(data.diagnostico){ y=pdfEnsurePage(doc,y); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(15,23,42); doc.text('Diagnóstico técnico',12,y); y+=5; doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(51,65,85); y=pdfLine(doc,data.diagnostico,12,y,186)+3; }
-  if(data.registroEntrega){
-    y=pdfSectionHeader(doc,'Registro de entrega',y);
-    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(51,65,85);
-    y=pdfLine(doc,`Status: ${data.status||'-'} • Entregue por: ${data.entreguePor||'-'} • Recebido por: ${data.recebidoPor||'-'} • Documento/telefone: ${data.documentoRecebedor||'-'} • Data/hora: ${fmtDateTime(data.dataEntrega||data.criadoEm)}`,12,y,186)+2;
-    if(data.observacaoFinal) y=pdfLine(doc,'Observação final: '+data.observacaoFinal,12,y,186)+3;
+  const data=normalizeSavedChecklistForReport(source||payloadBase());
+  const jsPDF=window.jspdf?.jsPDF; if(!jsPDF){ toast('Biblioteca PDF não carregou.'); return; }
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  const all=(data.itens||[]).filter(i=>i && (i.acao||i.entrega||i.obs||i.fotos));
+  const actions=all.filter(i=>ACTIONS_FINAL.has(i.acao) || i.obs || i.fotos || i.entrega);
+  const sectionMap={};
+  for(const i of all){ const k=i.secao||'Geral'; sectionMap[k]=sectionMap[k]||{ok:0,na:0,acoes:0,total:0}; sectionMap[k].total++; if(i.acao==='ok') sectionMap[k].ok++; else if(i.acao==='na') sectionMap[k].na++; else if(i.acao) sectionMap[k].acoes++; }
+  const st=data.stats||{};
+  const header=(cont=false)=>{
+    doc.setFillColor(15,23,42); doc.rect(0,0,210,25,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(cont?'CHECKLIST TÉCNICO — CONTINUAÇÃO':'CHECKLIST TÉCNICO — RESUMO PROFISSIONAL',10,9);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.text(`${data.oficinaNome||state.session?.oficinaNome||'Oficina'} • ${data.placa||'-'} • O.S. ${data.osRef||data.osNumero||'-'} • KM ${data.km||'-'} • Técnico ${data.tecnicoChecklist||data.responsavel||'-'}`,10,15);
+    doc.text(`Atualizado: ${fmtDateTime(data.atualizadoEm||data.criadoEm||nowISO())} • Status: ${checklistStatusLabel(data)} • Progresso: ${Math.round(data.progressoPercent||0)}%`,10,20);
+  };
+  const footer=()=>{ const n=doc.internal.getCurrentPageInfo().pageNumber; doc.setFont('helvetica','normal'); doc.setFontSize(6.3); doc.setTextColor(100,116,139); doc.text(`${APP.footer||'Powered by thIAguinho Soluções Digitais'} • ${data.placa||'-'} • Página ${n}`,105,292,{align:'center'}); };
+  const newPage=()=>{ footer(); doc.addPage(); header(true); return 32; };
+  header(false); let y=32;
+  const boxes=[['OK',st.ok||0],['Atenção',st.atencao||0],['Trocar',st.trocar||0],['Ações',st.tecnicas||0],['Pendentes',st.pending||0]];
+  boxes.forEach((b,i)=>{ const x=9+i*39; doc.setFillColor(248,250,252); doc.setDrawColor(226,232,240); doc.roundedRect(x,y,37,12,2,2,'FD'); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(15,23,42); doc.text(String(b[1]),x+4,y+5); doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(100,116,139); doc.text(b[0],x+4,y+9.5); }); y+=17;
+  if(data.relato){ doc.setFont('helvetica','bold'); doc.setFontSize(7.2); doc.setTextColor(15,23,42); doc.text('Relato:',10,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const l=doc.splitTextToSize(data.relato,174); doc.text(l,24,y); y+=Math.max(4,l.length*3.2)+2; }
+  if(data.diagnostico){ doc.setFont('helvetica','bold'); doc.setFontSize(7.2); doc.setTextColor(15,23,42); doc.text('Diagnóstico:',10,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const l=doc.splitTextToSize(data.diagnostico,166); doc.text(l,31,y); y+=Math.max(4,l.length*3.2)+2; }
+  if(y+15>280) y=newPage();
+  doc.setFillColor(232,240,254); doc.roundedRect(9,y-3,192,8,2,2,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(8.2); doc.setTextColor(15,23,42); doc.text('RESUMO POR SEÇÃO',12,y+2); y+=8;
+  doc.setFontSize(6.2); doc.setTextColor(71,85,105); doc.text('SEÇÃO',11,y); doc.text('OK',115,y); doc.text('N/A',137,y); doc.text('AÇÃO',158,y); doc.text('TOTAL',184,y); y+=4;
+  for(const [sec,v] of Object.entries(sectionMap)){ if(y+5>281) y=newPage(); doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(15,23,42); doc.text(String(sec).slice(0,62),11,y); doc.text(String(v.ok),118,y,{align:'right'}); doc.text(String(v.na),140,y,{align:'right'}); doc.text(String(v.acoes),164,y,{align:'right'}); doc.text(String(v.total),190,y,{align:'right'}); doc.setDrawColor(238,242,247); doc.line(9,y+1.5,201,y+1.5); y+=4.4; }
+  y+=4; if(y+12>280) y=newPage();
+  doc.setFillColor(254,242,242); doc.roundedRect(9,y-3,192,8,2,2,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(8.2); doc.setTextColor(127,29,29); doc.text(`ITENS QUE EXIGEM AÇÃO / OBSERVAÇÃO (${actions.length})`,12,y+2); y+=8;
+  if(!actions.length){ doc.setFont('helvetica','normal'); doc.setFontSize(7.2); doc.setTextColor(71,85,105); doc.text('Nenhuma ação técnica, observação ou foto registrada.',12,y); y+=6; }
+  else for(const i of actions){
+    const label=actionInfo(i.acao).label||i.acao||'Observação'; const obs=String(i.obs||i.diagnosticoObs||i.entrega?.obs||'').trim();
+    const itemLines=doc.splitTextToSize(String(i.item||i.descricao||'Item'),110); const obsLines=obs?doc.splitTextToSize((i.obsPorVoz?'Obs. por voz: ':'Obs.: ')+obs,165):[];
+    const meta=[label,i.updatedBy?('por '+i.updatedBy):'',i.fotos?(`${i.fotos} foto(s)`):''].filter(Boolean).join(' • '); const h=Math.max(8,itemLines.length*3.2+obsLines.length*3+5);
+    if(y+h>282) y=newPage(); pdfStatusBadge(doc,i.acao||'atencao',10,y+1); doc.setFont('helvetica','bold'); doc.setFontSize(7.6); doc.setTextColor(15,23,42); doc.text(String(i.secao||'Geral').slice(0,28),29,y); doc.text(itemLines,72,y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.1); doc.setTextColor(100,116,139); if(meta) doc.text(meta.slice(0,100),29,y+4); if(obsLines.length){ doc.setFontSize(6.5); doc.setTextColor(71,85,105); doc.text(obsLines,29,y+7); } y+=h; doc.setDrawColor(235,239,245); doc.line(9,y-2,201,y-2);
   }
-  const itens=(data.itens||[]).filter(i=>i.acao || i.entrega);
-  const groups={}; itens.forEach(i=>{ const key=i.secao||'Geral'; groups[key]=groups[key]||[]; groups[key].push(i); });
-  Object.entries(groups).forEach(([sec,arr])=>{
-    y=pdfSectionHeader(doc,sec,y);
-    arr.forEach(i=>{
-      y=pdfEnsurePage(doc,y+5);
-      pdfStatusBadge(doc,i.acao,12,y);
-      doc.setFont('helvetica','bold'); doc.setFontSize(8.7); doc.setTextColor(15,23,42);
-      doc.text(String(i.item||'Item').slice(0,76),31,y);
-      doc.setFont('helvetica','normal'); doc.setFontSize(7.4); doc.setTextColor(71,85,105);
-      const meta=[]; if(i.acaoLabel) meta.push('Ação: '+i.acaoLabel); if(i.entrega?.status) meta.push('Entrega: '+i.entrega.status); if(i.criticidade&&i.criticidade!=='normal') meta.push('Criticidade: '+i.criticidade); if(i.fotos) meta.push('Fotos: '+i.fotos); if(i.updatedBy) meta.push('Por: '+i.updatedBy);
-      if(meta.length) doc.text(meta.join(' • ').slice(0,110),31,y+4.3);
-      y+=8;
-      if(i.obs || i.diagnosticoObs || i.entrega?.obs){ doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(51,65,85); y=pdfLine(doc,(i.obsPorVoz?'Obs. por voz: ':'Obs.: ')+(i.obs||i.diagnosticoObs||i.entrega?.obs),31,y,158)+1; }
-      doc.setDrawColor(226,232,240); doc.line(12,y,198,y); y+=3;
-    });
-  });
-  const photos=allPhotoEntries(source?data:undefined).slice(0,24);
-  if(photos.length){
-    y=pdfSectionHeader(doc,`Fotos anexadas (${photos.length})`,y+4);
-    let col=0;
-    for(const ph of photos){
-      if(y+34>270){ pdfFooter(doc); doc.addPage(); y=14; col=0; }
-      const x=12 + col*47; const yy=y;
-      const img=await imageForPdf(ph.url);
-      doc.setDrawColor(226,232,240); doc.roundedRect(x,yy,42,30,2,2,'S');
-      if(img){ try{ doc.addImage(img,'JPEG',x+1,yy+1,40,24,undefined,'FAST'); }catch(e){ try{ doc.addImage(img,'PNG',x+1,yy+1,40,24,undefined,'FAST'); }catch(_){ doc.text('Imagem',x+14,yy+14); } } }
-      doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(71,85,105); doc.text(String(ph.label||'Foto').slice(0,24),x+1,yy+28);
-      col++; if(col>=4){ col=0; y+=34; }
-    }
-    if(col) y+=34;
+  const allPhotos=allPhotoEntries(data), photos=allPhotos.slice(0,12);
+  if(photos.length){ if(y+12>275) y=newPage(); doc.setFillColor(240,249,255); doc.roundedRect(9,y-3,192,8,2,2,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(12,74,110); doc.text(`FOTOS PRINCIPAIS (${photos.length}${allPhotos.length>12?' de '+allPhotos.length:''})`,12,y+2); y+=8; let col=0;
+    for(const ph of photos){ if(y+30>278){ y=newPage(); col=0; } const x=10+col*48, img=await imageForPdf(ph.url); doc.setDrawColor(226,232,240); doc.roundedRect(x,y,44,27,2,2,'S'); if(img){ try{ doc.addImage(img,'JPEG',x+1,y+1,42,21,undefined,'FAST'); }catch(e){ try{ doc.addImage(img,'PNG',x+1,y+1,42,21,undefined,'FAST'); }catch(_){} } } doc.setFont('helvetica','normal'); doc.setFontSize(5.6); doc.setTextColor(71,85,105); doc.text(String(ph.label||'Foto').slice(0,26),x+1,y+25); col++; if(col===4){ col=0; y+=31; } } if(col) y+=31;
   }
-  y=pdfEnsurePage(doc,y+14); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(15,23,42); doc.text('Assinaturas / conferência',12,y); y+=15;
-  doc.setDrawColor(100,116,139); doc.line(12,y,70,y); doc.line(78,y,136,y); doc.line(144,y,198,y);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(100,116,139); doc.text('Responsável técnico',41,y+4,{align:'center'}); doc.text('Gestor / conferente',107,y+4,{align:'center'}); doc.text('Cliente / recebimento',171,y+4,{align:'center'});
-  const total=doc.internal.getNumberOfPages(); for(let i=1;i<=total;i++){ doc.setPage(i); pdfFooter(doc); }
+  if(y+18>281) y=newPage(); doc.setDrawColor(148,163,184); doc.line(12,y+8,70,y+8); doc.line(78,y+8,136,y+8); doc.line(144,y+8,198,y+8); doc.setFont('helvetica','normal'); doc.setFontSize(6.2); doc.setTextColor(100,116,139); doc.text('Responsável técnico',41,y+12,{align:'center'}); doc.text('Gestor / conferente',107,y+12,{align:'center'}); doc.text('Cliente / recebimento',171,y+12,{align:'center'});
+  const total=doc.internal.getNumberOfPages(); for(let n=1;n<=total;n++){ doc.setPage(n); footer(); }
   doc.save(`${data.registroEntrega?'entrega':'checklist'}_${data.placa||'veiculo'}_${new Date().toISOString().slice(0,10)}.pdf`);
 }
+
 
 function gerarPDFEntrega(){ gerarPDF(entregaPayloadBase()); }
 function gerarXLSX(kind='checklist'){
@@ -1589,8 +1609,8 @@ function checklistResumoParaOS(data, entrega=false){
   return {
     id:data?.id||state.lastSavedId||uid(),
     tipo: entrega?'entrega':'tecnico',
-    app:data?.app||'OFICIN-IA-CHECKLIST-V15-22-2',
-    versao:data?.versao||'v15.22',
+    app:data?.app||'OFICIN-IA-CHECKLIST-V15-23-1',
+    versao:data?.versao||'v15.23.1',
     modeloVersao:data?.modeloVersao||state.model?.versao||'',
     placa:data?.placa||placaNorm($('placa')?.value||''),
     osRef:data?.osRef||($('osRef')?.value||'').trim(),
@@ -1845,11 +1865,11 @@ function bind(){
 }
 async function boot(){
   applyTheme(); bind();
-  if('serviceWorker' in navigator){ try{ await navigator.serviceWorker.register('./service-worker.js'); }catch(e){ console.warn('sw',e.message); } }
-  $('loginUsr').value=localStorage.getItem('OFICINIA_CHECKLIST_V15_LAST_USER')||'';
+  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('./service-worker.js?v=15.23.1'); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
+  $('loginUsr').value=localStorage.getItem('OFICINIA_CHECKLIST_V15_LAST_USER')||localStorage.getItem('j_last_user')||'';
   await loadModel(false); loadSession(true);
+  if(!state.session){ const fromSaas=readSaasSession(); if(fromSaas&&sessionOk(fromSaas)){ saveSession(fromSaas,!!localStorage.getItem('j_saved_login')); toast('Sessão do SAAS-2 reconhecida.'); } }
   if(state.session){ await loadModel(true); restoreDraft(); applyQueryPrefill(); renderAll(); go('screenInicio'); } else go('screenLogin');
 }
-
 document.addEventListener('DOMContentLoaded',boot);
 })();

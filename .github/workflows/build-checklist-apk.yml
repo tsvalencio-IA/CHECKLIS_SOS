@@ -36,10 +36,10 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const pkg = {
-            name: 'oficin-ia-checklist-v15-22-2-tempo-real-microfone-pdf',
-            version: '15.22.2',
+            name: 'oficin-ia-checklist-v15-23-1-definitivo',
+            version: '15.23.1',
             private: true,
-            description: 'OFICIN-IA Checklist V15.22.2 com sincronização em tempo real, acompanhamento ao vivo e observações por voz.',
+            description: 'OFICIN-IA Checklist V15.23.1 com sincronização em tempo real, acompanhamento ao vivo e observações por voz.',
             scripts: {
               'prepare:apk': 'node scripts/prepare-apk.js',
               'android:icons': 'node scripts/generate-android-icons.js',
@@ -68,6 +68,7 @@ jobs:
         run: |
           node --check js/checklist.js
           node --check js/config.js
+          node scripts/validate-v1523.js
           node - <<'NODE'
           const fs=require('fs');
           const model=JSON.parse(fs.readFileSync('data/checklist-model.json','utf8'));
@@ -75,10 +76,11 @@ jobs:
           const total=(model.secoes||[]).reduce((n,s)=>n+(s.itens||[]).length,0);
           if(total < 160) throw new Error('Modelo do checklist incompleto: '+total+' itens');
           const js=fs.readFileSync('js/checklist.js','utf8');
-          for(const req of ['autosaveRealtime','startLiveChecklistFromConsulta','Falar observação','obsPorVoz','normalizeSavedChecklistForReport','gerarPdfSalvo','normalizeModelShape','SAAS-2']){
-            if(!js.includes(req)) throw new Error('Recurso V15.22.2 ausente: '+req);
+          for(const req of ['autosaveRealtime','startLiveChecklistFromConsulta','Falar observação','obsPorVoz','normalizeSavedChecklistForReport','gerarPdfSalvo','normalizeModelShape','MODEL_DOC_ID','buscarOficinaComoSaas','readSaasSession','CHECKLIST — AÇÕES PARA A EQUIPE','SAAS-2']){
+            if(!js.includes(req)) throw new Error('Recurso V15.23.1 ausente: '+req);
           }
           if(!pkg.dependencies?.['@capacitor-community/speech-recognition']) throw new Error('Plugin nativo de voz ausente.');
+          if(js.split(/\\r?\\n/).some(line => line.includes("$('[data-") && !line.includes("$('[data-"))) throw new Error('Seletor data-* inválido: use $ para querySelectorAll.');
           console.log('Validação OK •', total, 'itens • tempo real + voz presentes');
           NODE
 
@@ -152,5 +154,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: OFICIN-IA-CHECKLIST-V15-22-2-TEMPO-REAL-MICROFONE-PDF
+          name: OFICIN-IA-CHECKLIST-V15-23-1-DEFINITIVO
           path: android/app/build/outputs/apk/debug/app-debug.apk
