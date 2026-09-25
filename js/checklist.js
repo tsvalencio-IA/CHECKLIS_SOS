@@ -97,7 +97,8 @@ function stopLiveChecklist(){
   state.liveUnsub=null; state.liveDocId=''; state.liveMonitor=false; state.liveLoaded=false; state.liveLastUpdate=''; state.liveLastBy='';
 }
 function scheduleRealtimeAutosave(delay=650){
-  if(state.remoteApplying || state.liveMonitor || state.autosaveWriting) return;
+  if(state.remoteApplying || state.liveMonitor) return;
+  if(state.autosaveWriting){ state.autosaveQueued=true; return; }
   if(!sessionOk(state.session||loadSession(false))) return;
   if(placaNorm($('placa')?.value||'').length!==7) return;
   clearTimeout(state.autosaveTimer);
@@ -918,9 +919,11 @@ async function consultar(statusOverride=''){
   if(statusOverride && $('consultaStatus')) $('consultaStatus').value=statusOverride;
   stopConsultaRealtime();
   go('screenConsulta'); setBusy('btnRodarConsulta',true,'Conectando...');
-  const db=activeDb(); const placa=placaNorm($('consultaPlaca')?.value||''); const qtd=Number($('consultaQtd')?.value||20); const filtro=$('consultaStatus')?.value||'todos';
+  const db=activeDb(); const placa=placaNorm($('consultaPlaca')?.value||''); const qtd=Number($('consultaQtd')?.value||20); const filtro=$('consultaStatus')?.value||'todos'; const tenantId=String(state.session?.tenantId||'').trim();
   const applyRows=(rows)=>{
     let res=rows||[];
+    if(tenantId) res=res.filter(x=>String(x.tenantId||'')===tenantId);
+    if(placa) res=res.filter(x=>placaNorm(x.placa||'')===placa);
     const resp=norm($('consultaResp')?.value||''); if(resp) res=res.filter(x=>norm(x.responsavel||x.tecnicoChecklist||'').includes(resp));
     if(filtro!=='todos') res=res.filter(x=>checklistStatusOf(x)===filtro);
     res.sort((a,b)=>toMs(b.liveAt||b.liveAtIso||b.atualizadoEm||b.criadoEm||b.createdAt)-toMs(a.liveAt||a.liveAtIso||a.atualizadoEm||a.criadoEm||a.createdAt));
@@ -928,15 +931,14 @@ async function consultar(statusOverride=''){
   };
   try{
     let query=db.collection('checklists');
-    if(placa) query=query.where('placa','==',placa).limit(Math.max(qtd,50));
-    else if(filtro!=='todos') query=query.where('statusChecklist','==',filtro).limit(Math.max(qtd,80));
-    else query=query.limit(Math.max(qtd,80));
+    if(tenantId) query=query.where('tenantId','==',tenantId);
+    query=query.limit(Math.max(qtd,120));
     state.consultaUnsub=query.onSnapshot(
       snap=>applyRows(snap.docs.map(d=>({id:d.id,_col:'checklists',...d.data()}))),
       async err=>{
         console.warn('consulta realtime',err); stopConsultaRealtime();
         try{
-          const snap=placa?await db.collection('checklists').where('placa','==',placa).limit(Math.max(qtd,50)).get():await db.collection('checklists').limit(Math.max(qtd,80)).get();
+          let fallback=db.collection('checklists'); if(tenantId) fallback=fallback.where('tenantId','==',tenantId); const snap=await fallback.limit(Math.max(qtd,120)).get();
           applyRows(snap.docs.map(d=>({id:d.id,_col:'checklists',...d.data()})));
           toast('Tempo real indisponível nesta consulta; exibindo a última leitura.');
         }catch(e){ console.warn(e); $('consultaLista').innerHTML='<div class="notice bad">Consulta bloqueada pelo Firebase. Confira as regras/índices.</div>'; setBusy('btnRodarConsulta',false); }
