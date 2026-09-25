@@ -51,15 +51,15 @@ Resultado esperado:
 
 ## URL do SaaS
 
-O Checklist não precisa abrir o SaaS para funcionar.
+O SaaS oficial integrado a este Checklist é o repositório **`tsvalencio-IA/SAAS-2`**.
 
-Se quiser manter o botão **Abrir SaaS**, edite `js/config.js` e coloque o endereço do SaaS no GitHub Pages em:
+GitHub Pages oficial usado pelo botão **Abrir SaaS**:
 
-```js
-saasBaseUrl: 'https://SEU-USUARIO.github.io/SEU-REPOSITORIO-DO-SAAS/'
+```text
+https://tsvalencio-ia.github.io/SAAS-2/
 ```
 
-Se deixar vazio, o botão apenas avisa que a URL do SaaS não foi configurada.
+Gestor abre `jarvis.html`; mecânico/equipe abre `equipe.html`. A V15.21.1 também corrige automaticamente no aparelho qualquer URL legada salva de `OFICIN-IA-COM_IA`, `OFICIN-IA` ou `oficin-ia-com-ia.vercel.app`.
 
 
 ## Correção V15.4 — GitHub Actions
