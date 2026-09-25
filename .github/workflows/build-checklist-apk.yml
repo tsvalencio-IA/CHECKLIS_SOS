@@ -39,7 +39,7 @@ jobs:
             name: 'oficin-ia-checklist-v15-21-producao-pdf-equipe',
             version: '15.21.0',
             private: true,
-            description: 'OFICIN-IA Checklist V15.21 com salvar a qualquer momento, Em Produção e PDF de equipe.',
+            description: 'OFICIN-IA Checklist V15.22 com sincronização em tempo real, acompanhamento ao vivo e observações por voz.',
             scripts: {
               'prepare:apk': 'node scripts/prepare-apk.js',
               'android:icons': 'node scripts/generate-android-icons.js',
@@ -133,5 +133,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: OFICIN-IA-CHECKLIST-V15-21-PRODUCAO-PDF-EQUIPE
+          name: OFICIN-IA-CHECKLIST-V15-22-TEMPO-REAL-MICROFONE
           path: android/app/build/outputs/apk/debug/app-debug.apk
