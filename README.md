@@ -119,3 +119,20 @@ A impressão manual do mecânico foi compactada para o padrão oficina em até 2
 - Serviços agrupados separados de peças.
 - PDF de cotação compacto para 1 a 2 páginas quando possível.
 - XLSX inteligente com abas Resumo_Executivo, Pecas_Agrupadas, Servicos_Agrupados, Avaliar_Aprovar, Itens_Detalhados e Fotos.
+
+
+## V15.22 — PC + celular em tempo real
+
+- A mesma aplicação do GitHub Pages funciona no **PC, tablet e celular**.
+- URL web: `https://tsvalencio-ia.github.io/CHECKLIS_SOS/`.
+- Com a placa completa, alterações do checklist são sincronizadas automaticamente no Firebase com debounce curto.
+- Gestores podem abrir **Em produção > Acompanhar ao vivo** para ver as marcações e observações conforme o mecânico preenche.
+- O modo ao vivo é somente leitura para evitar conflito acidental entre gestor e mecânico.
+- Cada item possui **🎤 Falar observação**. No Chrome/Edge, a fala é convertida em texto em português do Brasil e sincronizada.
+- Observações feitas por voz ficam marcadas no registro e aparecem no **PDF da equipe**, no **PDF técnico** e no **XLSX**.
+- O botão **Salvar agora** continua existindo como gravação explícita e também envia fotos pendentes ao Cloudinary.
+- Integração oficial do SaaS: `https://tsvalencio-ia.github.io/SAAS-2/`.
+
+### Microfone no PC
+
+Use Chrome ou Edge atualizado e permita o microfone quando o navegador solicitar. O GitHub Pages já usa HTTPS, requisito para acesso ao microfone.
