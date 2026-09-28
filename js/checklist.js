@@ -416,7 +416,7 @@ function modelLooksCompatible(model){
 }
 async function loadModel(tryRemote=false){
   let base=null; let model=null;
-  try{ const res=await fetch('./data/checklist-model.json?v=15.23.2',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
+  try{ const res=await fetch('./data/checklist-model.json?v=15.23.3',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
   try{ const saved=safeJson(localStorage.getItem(modelStorageKey()))||safeJson(localStorage.getItem(MODEL_KEY)); if(modelLooksCompatible(saved)) model=mergeEvolutionModel(base,saved); }catch(e){ console.warn('modelo local legado ignorado',e); }
   if(tryRemote && state.session){
     try{
@@ -894,7 +894,7 @@ function payloadBase(){
   const st=stats(); const ts=nowISO(); const statusChecklist=st.pending===0&&st.percent===100?'concluido':'em_producao';
   const criadoEm=state.currentCreatedAt||ts;
   const finalizadoEm=statusChecklist==='concluido'?(state.currentFinalizedAt||ts):'';
-  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-23-2', versao:'v15.23.2', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
+  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-23-3', versao:'v15.23.3', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
 }
 async function saveChecklist(){
   if(state.liveMonitor){ toast('Acompanhamento ao vivo é somente leitura. Abra em Editar para salvar alterações.'); return null; }
@@ -1350,7 +1350,7 @@ function entregaPayloadBase(){
   const base=payloadBase();
   const itens=getCriticalItems().map(i=>({checklistItemId:i.id, item:i.item, secao:i.secao, acao:i.acao, acaoLabel:i.acaoLabel, diagnosticoObs:i.obs, fotos:i.fotos||0, fotoUrls:i.fotoUrls||[], entrega:state.delivery[i.id]||{status:'pendente'}}));
   const dataEntrega=($('entregaData')?.value||'').trim();
-  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-23-2', versao:'v15.23.2', registroEntrega:true};
+  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-23-3', versao:'v15.23.3', registroEntrega:true};
 }
 async function saveEntrega(){
   setBusy('btnSalvarEntrega',true,'Salvando entrega...');
@@ -1486,21 +1486,85 @@ function equipePdfFilename(data){ return `equipe_${placaNorm(data?.placa||'veicu
 async function gerarPDFEquipe(source,mode='save'){
   const data=normalizeSavedChecklistForReport(source||payloadBase());
   const jsPDF=window.jspdf?.jsPDF; if(!jsPDF){ toast('Biblioteca PDF não carregou.'); return null; }
-  const doc=new jsPDF({unit:'mm',format:'a4'}); const itens=(data.itens||[]).filter(i=>ACTIONS_FINAL.has(i.acao));
-  const st=data.stats||{},pending=onlyFinite(st.pending??data.itensPendentes),pct=onlyFinite(st.percent??data.progressoPercent);
-  const pageHeader=()=>{ doc.setFillColor(15,23,42); doc.rect(0,0,210,23,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text('CHECKLIST — AÇÕES PARA A EQUIPE',9,8); doc.setFont('helvetica','normal'); doc.setFontSize(7.2); doc.text(`${data.oficinaNome||'OFICIN-IA'} • Placa ${data.placa||'-'} • O.S. ${data.osRef||data.osNumero||'-'} • KM ${data.km||'-'} • Técnico ${data.tecnicoChecklist||data.responsavel||'-'}`,9,14); doc.text(`Atualizado ${fmtDateTime(data.atualizadoEm||data.criadoEm||nowISO())}`,9,19); };
-  const ensure=(y,h=8)=>{ if(y+h<=283) return y; doc.addPage(); pageHeader(); return 29; }; pageHeader(); let y=29;
-  const counts={trocar:0,retificar:0,ajustar:0,lubrificar:0,limpar:0,revisar:0}; itens.forEach(i=>counts[equipeActionGroup(i.acao).key]++);
-  doc.setFillColor(pending>0?255:240,pending>0?247:253,pending>0?237:244); doc.setDrawColor(pending>0?251:134,pending>0?146:239,pending>0?60:172); doc.roundedRect(9,y-3,192,11,2,2,'FD'); doc.setTextColor(pending>0?154:21,pending>0?52:128,pending>0?18:61); doc.setFont('helvetica','bold'); doc.setFontSize(8.2); doc.text(pending>0?`EM PRODUÇÃO • ${Math.round(pct)}% • ${pending} pendente(s)`:'CONCLUÍDO • 100% preenchido',13,y+2); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); doc.setFontSize(7); doc.text(`Trocar ${counts.trocar} • Retificar ${counts.retificar} • Regular/Ajustar ${counts.ajustar} • Lubrificar ${counts.lubrificar} • Limpar ${counts.limpar} • Revisar/Atenção ${counts.revisar}`,13,y+6); y+=15;
-  if(data.relato){ y=ensure(y,9); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(15,23,42); doc.text('Relato:',9,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const ls=doc.splitTextToSize(String(data.relato),174); doc.text(ls,25,y); y+=Math.max(5,ls.length*3.2)+2; }
-  if(data.diagnostico){ y=ensure(y,9); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(15,23,42); doc.text('Diagnóstico:',9,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const ls=doc.splitTextToSize(String(data.diagnostico),168); doc.text(ls,31,y); y+=Math.max(5,ls.length*3.2)+2; }
-  if(!itens.length){ y=ensure(y,18); doc.setFillColor(240,253,244); doc.setDrawColor(134,239,172); doc.roundedRect(9,y,192,16,2,2,'FD'); doc.setTextColor(21,128,61); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Nenhuma ação técnica foi marcada.',13,y+7); doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.text('OK e N/A ficam no registro técnico, sem poluir o relatório operacional.',13,y+12); y+=20; }
-  else { const ordered=[...itens].sort((a,b)=>equipeActionGroup(a.acao).order-equipeActionGroup(b.acao).order||String(a.secao||'').localeCompare(String(b.secao||''),'pt-BR')||String(a.item||'').localeCompare(String(b.item||''),'pt-BR')); doc.setFillColor(226,232,240); doc.rect(9,y-3,192,7,'F'); doc.setTextColor(51,65,85); doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.text('AÇÃO',11,y+1); doc.text('SEÇÃO',36,y+1); doc.text('ITEM',79,y+1); doc.text('OBSERVAÇÃO',142,y+1); y+=7;
-    for(const i of ordered){ const g=equipeActionGroup(i.acao),obs=String(i.obs||i.diagnosticoObs||'').trim(),secLines=doc.splitTextToSize(String(i.secao||'Geral'),39),itemLines=doc.splitTextToSize(String(i.item||'Item'),59),obsLines=doc.splitTextToSize(obs?(i.obsPorVoz?'Voz: ':'')+obs:'-',57),lines=Math.max(secLines.length,itemLines.length,obsLines.length,1),h=Math.max(6.5,lines*3.05+2.2); y=ensure(y,h+1); doc.setDrawColor(226,232,240); doc.line(9,y+h,201,y+h); doc.setFontSize(6.5); doc.setFont('helvetica','bold'); doc.setTextColor(...g.color); doc.text(g.title.replace(' / ','/').slice(0,18),11,y+3.4); doc.setFont('helvetica','normal'); doc.setTextColor(51,65,85); doc.text(secLines,36,y+3.4); doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42); doc.text(itemLines,79,y+3.4); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); doc.text(obsLines,142,y+3.4); y+=h; }
+  const doc=new jsPDF({unit:'mm',format:'a4'}), q=buildQuoteData(data);
+  const st=data.stats||{}, pending=onlyFinite(st.pending??data.itensPendentes), pct=onlyFinite(st.percent??data.progressoPercent);
+  const actionable=(data.itens||[]).filter(i=>ACTIONS_FINAL.has(i.acao));
+  const obsItems=actionable.filter(i=>String(i.obs||i.diagnosticoObs||'').trim());
+  const header=()=>{
+    doc.setFillColor(15,23,42); doc.rect(0,0,210,24,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text('PLANO DE AÇÃO — EQUIPE DA OFICINA',9,8.5);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.2);
+    doc.text(`${data.oficinaNome||'OFICIN-IA'} • Placa ${data.placa||'-'} • O.S. ${data.osRef||data.osNumero||'-'} • KM ${data.km||'-'} • Técnico ${data.tecnicoChecklist||data.responsavel||'-'}`,9,14.5);
+    doc.text(`Atualizado ${fmtDateTime(data.atualizadoEm||data.criadoEm||nowISO())}`,9,19.5);
+  };
+  const ensure=(y,h=8)=>{ if(y+h<=283) return y; doc.addPage(); header(); return 30; };
+  const groupTitle=(title,count,color,y)=>{
+    y=ensure(y,11); doc.setFillColor(...color); doc.roundedRect(9,y-4,192,8,2,2,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(8.4); doc.text(`${title} (${count})`,12,y+1.5); return y+8;
+  };
+  const drawGroups=(groups,title,color,kind,y)=>{
+    if(!groups.length) return y;
+    y=groupTitle(title,groups.length,color,y);
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.3); doc.setTextColor(71,85,105);
+    doc.text(kind==='buy'?'QTD':'AÇÃO',11,y); doc.text(kind==='buy'?'PEÇA / MATERIAL':'ITEM / SERVIÇO',28,y); doc.text('POS.',108,y); doc.text('OBS. / DETALHE',134,y); y+=4;
+    doc.setDrawColor(226,232,240); doc.line(9,y-1,201,y-1);
+    for(const g of groups){
+      const obs=compactObs(g.itens,180);
+      const action=[...new Set((g.itens||[]).map(x=>actionInfo(x.acao).label||x.acao).filter(Boolean))].join('/');
+      const source=[...new Set((g.itens||[]).map(x=>x.secao).filter(Boolean))].join(', ');
+      const detail=obs || source || '-';
+      const itemLines=doc.splitTextToSize(String(g.nome||'Item'),76);
+      const detLines=doc.splitTextToSize(String(detail),65);
+      const h=Math.max(7.2,itemLines.length*3.1,detLines.length*3.0)+2;
+      y=ensure(y,h+1);
+      doc.setFontSize(6.7); doc.setTextColor(15,23,42); doc.setFont('helvetica','bold');
+      doc.text(kind==='buy'?(String(g.qtd||1)+'x'):String(action||'-').slice(0,14),11,y+3);
+      doc.text(itemLines,28,y+3);
+      doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105);
+      doc.text((g.posicoes?.length?g.posicoes.join(', '):'-').slice(0,16),108,y+3);
+      doc.text(detLines,134,y+3);
+      y+=h; doc.setDrawColor(235,239,245); doc.line(9,y-1,201,y-1);
+    }
+    return y+4;
+  };
+
+  header(); let y=30;
+  doc.setFillColor(pending>0?255:240,pending>0?247:253,pending>0?237:244); doc.setDrawColor(pending>0?251:134,pending>0?146:239,pending>0?60:172); doc.roundedRect(9,y-3,192,14,2,2,'FD');
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.4); doc.setTextColor(pending>0?154:21,pending>0?52:128,pending>0?18:61);
+  doc.text(pending>0?`EM PRODUÇÃO • ${Math.round(pct)}% • ${pending} pendente(s)`:'CONCLUÍDO • 100% preenchido',13,y+2);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(71,85,105);
+  doc.text(`Comprar/cotar: ${q.pecas.length} grupo(s) • Serviços: ${q.servicos.length} • Revisar/diagnosticar: ${q.avaliar.length} • OK: ${st.ok||0}`,13,y+7); y+=18;
+
+  if(data.relato){ y=ensure(y,9); doc.setFont('helvetica','bold'); doc.setFontSize(7.2); doc.setTextColor(15,23,42); doc.text('Relato:',9,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const l=doc.splitTextToSize(String(data.relato),174); doc.text(l,25,y); y+=Math.max(5,l.length*3.2)+2; }
+  if(data.diagnostico){ y=ensure(y,9); doc.setFont('helvetica','bold'); doc.setFontSize(7.2); doc.setTextColor(15,23,42); doc.text('Diagnóstico:',9,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const l=doc.splitTextToSize(String(data.diagnostico),166); doc.text(l,31,y); y+=Math.max(5,l.length*3.2)+2; }
+
+  y=drawGroups(q.pecas,'1. COMPRAR / COTAR',[220,38,38],'buy',y);
+  y=drawGroups(q.servicos,'2. EXECUTAR NA OFICINA',[37,99,235],'service',y);
+  y=drawGroups(q.avaliar,'3. REVISAR / DIAGNOSTICAR ANTES DE COMPRAR',[217,119,6],'review',y);
+
+  if(obsItems.length){
+    y=groupTitle('4. OBSERVAÇÕES DO TÉCNICO QUE PODEM ALTERAR O ORÇAMENTO',obsItems.length,[126,34,206],y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.4); doc.setTextColor(88,28,135);
+    const warn=doc.splitTextToSize('Confirme a peça exata antes da compra quando a observação especificar componente, lado ou condição diferente do nome do item.',188);
+    doc.text(warn,11,y); y+=warn.length*3.1+3;
+    for(const i of obsItems){
+      const obs=String(i.obs||i.diagnosticoObs||'').trim();
+      const item=doc.splitTextToSize(`${i.secao||'Geral'} • ${i.item||'Item'}`,76);
+      const ol=doc.splitTextToSize(obs,98); const h=Math.max(item.length,ol.length)*3.1+3; y=ensure(y,h+1);
+      doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42); doc.text(item,11,y+2.8);
+      doc.setFont('helvetica','normal'); doc.setTextColor(88,28,135); doc.text(ol,102,y+2.8);
+      y+=h; doc.setDrawColor(237,233,254); doc.line(9,y-1,201,y-1);
+    }
+    y+=3;
   }
+
+  if(!q.pecas.length&&!q.servicos.length&&!q.avaliar.length){
+    y=ensure(y,18); doc.setFillColor(240,253,244); doc.setDrawColor(134,239,172); doc.roundedRect(9,y,192,16,2,2,'FD'); doc.setTextColor(21,128,61); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Nenhuma ação pendente para a equipe.',13,y+7); doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.text('Itens OK e N/A permanecem registrados no checklist técnico.',13,y+12); y+=20;
+  }
+
   y=ensure(y,18); doc.setDrawColor(148,163,184); doc.line(14,y+9,70,y+9); doc.line(78,y+9,136,y+9); doc.line(144,y+9,198,y+9); doc.setFont('helvetica','normal'); doc.setFontSize(6.6); doc.setTextColor(100,116,139); doc.text('Responsável técnico',42,y+13,{align:'center'}); doc.text('Conferência',107,y+13,{align:'center'}); doc.text('Ciência / equipe',171,y+13,{align:'center'});
   const total=doc.internal.getNumberOfPages(); for(let pg=1;pg<=total;pg++){ doc.setPage(pg); doc.setFont('helvetica','normal'); doc.setFontSize(6.3); doc.setTextColor(100,116,139); doc.text(`${APP.footer||'Powered by thIAguinho Soluções Digitais'} • ${data.placa||'-'} • Página ${pg}/${total}`,105,291,{align:'center'}); }
-  const fileName=equipePdfFilename(data),blob=doc.output('blob'); if(mode==='blob') return {blob,fileName,data,totalAcoes:itens.length,paginas:total}; doc.save(fileName); return {blob,fileName,data,totalAcoes:itens.length,paginas:total};
+  const fileName=equipePdfFilename(data),blob=doc.output('blob'); if(mode==='blob') return {blob,fileName,data,totalAcoes:actionable.length,paginas:total}; doc.save(fileName); return {blob,fileName,data,totalAcoes:actionable.length,paginas:total};
 }
 async function compartilharPDFEquipe(source){
   try{
@@ -1516,52 +1580,89 @@ async function compartilharPDFEquipe(source){
 
 async function gerarPDF(source,mode='save'){
   const data=normalizeSavedChecklistForReport(source||payloadBase());
-  const jsPDF=window.jspdf?.jsPDF; if(!jsPDF){ toast('Biblioteca PDF não carregou.'); return; }
-  const doc=new jsPDF({unit:'mm',format:'a4'});
-  const all=(data.itens||[]).filter(i=>i && (i.acao||i.entrega||i.obs||i.fotos));
-  const actions=all.filter(i=>ACTIONS_FINAL.has(i.acao) || i.obs || i.fotos || i.entrega);
+  const jsPDF=window.jspdf?.jsPDF; if(!jsPDF){ toast('Biblioteca PDF não carregou.'); return null; }
+  const doc=new jsPDF({unit:'mm',format:'a4'}), q=buildQuoteData(data);
+  const all=(data.itens||[]).filter(Boolean), st=data.stats||{};
+  const actionable=all.filter(i=>ACTIONS_FINAL.has(i.acao));
+  const obsItems=actionable.filter(i=>String(i.obs||i.diagnosticoObs||'').trim());
   const sectionMap={};
   for(const i of all){ const k=i.secao||'Geral'; sectionMap[k]=sectionMap[k]||{ok:0,na:0,acoes:0,total:0}; sectionMap[k].total++; if(i.acao==='ok') sectionMap[k].ok++; else if(i.acao==='na') sectionMap[k].na++; else if(i.acao) sectionMap[k].acoes++; }
-  const st=data.stats||{};
   const header=(cont=false)=>{
-    doc.setFillColor(15,23,42); doc.rect(0,0,210,25,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(cont?'CHECKLIST TÉCNICO — CONTINUAÇÃO':'CHECKLIST TÉCNICO — RESUMO PROFISSIONAL',10,9);
-    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.text(`${data.oficinaNome||state.session?.oficinaNome||'Oficina'} • ${data.placa||'-'} • O.S. ${data.osRef||data.osNumero||'-'} • KM ${data.km||'-'} • Técnico ${data.tecnicoChecklist||data.responsavel||'-'}`,10,15);
-    doc.text(`Atualizado: ${fmtDateTime(data.atualizadoEm||data.criadoEm||nowISO())} • Status: ${checklistStatusLabel(data)} • Progresso: ${Math.round(data.progressoPercent||0)}%`,10,20);
+    doc.setFillColor(15,23,42); doc.rect(0,0,210,25,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text(cont?'CHECKLIST TÉCNICO — PLANO DE AÇÃO (CONT.)':'CHECKLIST TÉCNICO — PLANO DE AÇÃO',10,9);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7);
+    doc.text(`${data.oficinaNome||state.session?.oficinaNome||'Oficina'} • ${data.placa||'-'} • O.S. ${data.osRef||data.osNumero||'-'} • KM ${data.km||'-'} • Técnico ${data.tecnicoChecklist||data.responsavel||'-'}`,10,15);
+    doc.text(`Atualizado: ${fmtDateTime(data.atualizadoEm||data.criadoEm||nowISO())} • ${checklistStatusLabel(data)} • Progresso ${Math.round(data.progressoPercent||0)}%`,10,20);
   };
   const footer=()=>{ const n=doc.internal.getCurrentPageInfo().pageNumber; doc.setFont('helvetica','normal'); doc.setFontSize(6.3); doc.setTextColor(100,116,139); doc.text(`${APP.footer||'Powered by thIAguinho Soluções Digitais'} • ${data.placa||'-'} • Página ${n}`,105,292,{align:'center'}); };
   const newPage=()=>{ footer(); doc.addPage(); header(true); return 32; };
+  const ensure=(y,h=8)=> y+h>282?newPage():y;
+  const titleBar=(title,count,color,y)=>{
+    y=ensure(y,11); doc.setFillColor(...color); doc.roundedRect(9,y-4,192,8,2,2,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.text(`${title} (${count})`,12,y+1.5); return y+8;
+  };
+  const drawGroups=(groups,title,color,kind,y)=>{
+    if(!groups.length) return y;
+    y=titleBar(title,groups.length,color,y);
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.2); doc.setTextColor(71,85,105);
+    doc.text(kind==='buy'?'QTD':'AÇÃO',11,y); doc.text(kind==='buy'?'PEÇA / MATERIAL':'ITEM / SERVIÇO',28,y); doc.text('POS.',108,y); doc.text('OBS. / ORIGEM',134,y); y+=4;
+    for(const g of groups){
+      const obs=compactObs(g.itens,200);
+      const actions=[...new Set((g.itens||[]).map(x=>actionInfo(x.acao).label||x.acao).filter(Boolean))].join('/');
+      const origins=[...new Set((g.itens||[]).map(x=>x.secao).filter(Boolean))].join(', ');
+      const detail=obs || origins || '-';
+      const il=doc.splitTextToSize(String(g.nome||'Item'),76), dl=doc.splitTextToSize(String(detail),65);
+      const h=Math.max(7.4,il.length*3.15,dl.length*3.0)+2; y=ensure(y,h+1);
+      doc.setFont('helvetica','bold'); doc.setFontSize(6.7); doc.setTextColor(15,23,42); doc.text(kind==='buy'?(String(g.qtd||1)+'x'):String(actions||'-').slice(0,14),11,y+3); doc.text(il,28,y+3);
+      doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); doc.text((g.posicoes?.length?g.posicoes.join(', '):'-').slice(0,16),108,y+3); doc.text(dl,134,y+3);
+      y+=h; doc.setDrawColor(235,239,245); doc.line(9,y-1,201,y-1);
+    }
+    return y+4;
+  };
+
   header(false); let y=32;
-  const boxes=[['OK',st.ok||0],['Atenção',st.atencao||0],['Trocar',st.trocar||0],['Ações',st.tecnicas||0],['Pendentes',st.pending||0]];
-  boxes.forEach((b,i)=>{ const x=9+i*39; doc.setFillColor(248,250,252); doc.setDrawColor(226,232,240); doc.roundedRect(x,y,37,12,2,2,'FD'); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(15,23,42); doc.text(String(b[1]),x+4,y+5); doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(100,116,139); doc.text(b[0],x+4,y+9.5); }); y+=17;
-  if(data.relato){ doc.setFont('helvetica','bold'); doc.setFontSize(7.2); doc.setTextColor(15,23,42); doc.text('Relato:',10,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const l=doc.splitTextToSize(data.relato,174); doc.text(l,24,y); y+=Math.max(4,l.length*3.2)+2; }
-  if(data.diagnostico){ doc.setFont('helvetica','bold'); doc.setFontSize(7.2); doc.setTextColor(15,23,42); doc.text('Diagnóstico:',10,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); const l=doc.splitTextToSize(data.diagnostico,166); doc.text(l,31,y); y+=Math.max(4,l.length*3.2)+2; }
-  if(y+15>280) y=newPage();
-  doc.setFillColor(232,240,254); doc.roundedRect(9,y-3,192,8,2,2,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(8.2); doc.setTextColor(15,23,42); doc.text('RESUMO POR SEÇÃO',12,y+2); y+=8;
-  doc.setFontSize(6.2); doc.setTextColor(71,85,105); doc.text('SEÇÃO',11,y); doc.text('OK',115,y); doc.text('N/A',137,y); doc.text('AÇÃO',158,y); doc.text('TOTAL',184,y); y+=4;
-  for(const [sec,v] of Object.entries(sectionMap)){ if(y+5>281) y=newPage(); doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(15,23,42); doc.text(String(sec).slice(0,62),11,y); doc.text(String(v.ok),118,y,{align:'right'}); doc.text(String(v.na),140,y,{align:'right'}); doc.text(String(v.acoes),164,y,{align:'right'}); doc.text(String(v.total),190,y,{align:'right'}); doc.setDrawColor(238,242,247); doc.line(9,y+1.5,201,y+1.5); y+=4.4; }
-  y+=4; if(y+12>280) y=newPage();
-  doc.setFillColor(254,242,242); doc.roundedRect(9,y-3,192,8,2,2,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(8.2); doc.setTextColor(127,29,29); doc.text(`ITENS QUE EXIGEM AÇÃO / OBSERVAÇÃO (${actions.length})`,12,y+2); y+=8;
-  if(!actions.length){ doc.setFont('helvetica','normal'); doc.setFontSize(7.2); doc.setTextColor(71,85,105); doc.text('Nenhuma ação técnica, observação ou foto registrada.',12,y); y+=6; }
-  else for(const i of actions){
-    const label=actionInfo(i.acao).label||i.acao||'Observação'; const obs=String(i.obs||i.diagnosticoObs||i.entrega?.obs||'').trim();
-    const itemLines=doc.splitTextToSize(String(i.item||i.descricao||'Item'),110); const obsLines=obs?doc.splitTextToSize((i.obsPorVoz?'Obs. por voz: ':'Obs.: ')+obs,165):[];
-    const meta=[label,i.updatedBy?('por '+i.updatedBy):'',i.fotos?(`${i.fotos} foto(s)`):''].filter(Boolean).join(' • '); const h=Math.max(8,itemLines.length*3.2+obsLines.length*3+5);
-    if(y+h>282) y=newPage(); pdfStatusBadge(doc,i.acao||'atencao',10,y+1); doc.setFont('helvetica','bold'); doc.setFontSize(7.6); doc.setTextColor(15,23,42); doc.text(String(i.secao||'Geral').slice(0,28),29,y); doc.text(itemLines,72,y);
-    doc.setFont('helvetica','normal'); doc.setFontSize(6.1); doc.setTextColor(100,116,139); if(meta) doc.text(meta.slice(0,100),29,y+4); if(obsLines.length){ doc.setFontSize(6.5); doc.setTextColor(71,85,105); doc.text(obsLines,29,y+7); } y+=h; doc.setDrawColor(235,239,245); doc.line(9,y-2,201,y-2);
+  const top=[['COMPRAR',q.pecas.length],['PEÇAS EST.',q.totalPecas],['EXECUTAR',q.servicos.length],['REVISAR',q.avaliar.length],['PENDENTES',st.pending||0]];
+  top.forEach((b,i)=>{ const x=9+i*39; doc.setFillColor(248,250,252); doc.setDrawColor(226,232,240); doc.roundedRect(x,y,37,13,2,2,'FD'); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(15,23,42); doc.text(String(b[1]),x+4,y+5.2); doc.setFont('helvetica','normal'); doc.setFontSize(5.8); doc.setTextColor(100,116,139); doc.text(b[0],x+4,y+10); }); y+=18;
+  doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(100,116,139);
+  doc.text(`Conferência: ${st.ok||0} OK • ${all.filter(i=>i.acao==='na').length} N/A • ${actionable.length} item(ns) com ação. Itens OK não são repetidos individualmente neste relatório.`,10,y); y+=5;
+
+  if(data.relato){ const l=doc.splitTextToSize(String(data.relato),174); doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42); doc.text('Relato:',10,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); doc.text(l,24,y); y+=Math.max(4,l.length*3.1)+2; }
+  if(data.diagnostico){ const l=doc.splitTextToSize(String(data.diagnostico),166); doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42); doc.text('Diagnóstico:',10,y); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105); doc.text(l,31,y); y+=Math.max(4,l.length*3.1)+2; }
+
+  y=drawGroups(q.pecas,'1. COMPRAR / COTAR — PEÇAS E MATERIAIS',[220,38,38],'buy',y);
+  y=drawGroups(q.servicos,'2. EXECUTAR — SERVIÇOS NA OFICINA',[37,99,235],'service',y);
+  y=drawGroups(q.avaliar,'3. REVISAR / DIAGNOSTICAR — NÃO COMPRAR AINDA',[217,119,6],'review',y);
+
+  if(obsItems.length){
+    y=titleBar('4. OBSERVAÇÕES QUE IMPACTAM O ORÇAMENTO',obsItems.length,[126,34,206],y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.3); doc.setTextColor(88,28,135);
+    const note=doc.splitTextToSize('A observação do técnico deve ser conferida antes da compra quando ela especificar peça, lado, quantidade ou condição diferente do nome geral do item.',188); doc.text(note,11,y); y+=note.length*3.0+3;
+    for(const i of obsItems){
+      const left=doc.splitTextToSize(`${i.secao||'Geral'} • ${i.item||'Item'}`,78);
+      const right=doc.splitTextToSize(String(i.obs||i.diagnosticoObs||''),96); const h=Math.max(left.length,right.length)*3.1+3; y=ensure(y,h+1);
+      doc.setFont('helvetica','bold'); doc.setTextColor(15,23,42); doc.text(left,11,y+2.8);
+      doc.setFont('helvetica','normal'); doc.setTextColor(88,28,135); doc.text(right,104,y+2.8); y+=h; doc.setDrawColor(237,233,254); doc.line(9,y-1,201,y-1);
+    }
+    y+=3;
   }
-  const allPhotos=allPhotoEntries(data), photos=allPhotos.slice(0,12);
-  if(photos.length){ if(y+12>275) y=newPage(); doc.setFillColor(240,249,255); doc.roundedRect(9,y-3,192,8,2,2,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(12,74,110); doc.text(`FOTOS PRINCIPAIS (${photos.length}${allPhotos.length>12?' de '+allPhotos.length:''})`,12,y+2); y+=8; let col=0;
-    for(const ph of photos){ if(y+30>278){ y=newPage(); col=0; } const x=10+col*48, img=await imageForPdf(ph.url); doc.setDrawColor(226,232,240); doc.roundedRect(x,y,44,27,2,2,'S'); if(img){ try{ doc.addImage(img,'JPEG',x+1,y+1,42,21,undefined,'FAST'); }catch(e){ try{ doc.addImage(img,'PNG',x+1,y+1,42,21,undefined,'FAST'); }catch(_){} } } doc.setFont('helvetica','normal'); doc.setFontSize(5.6); doc.setTextColor(71,85,105); doc.text(String(ph.label||'Foto').slice(0,26),x+1,y+25); col++; if(col===4){ col=0; y+=31; } } if(col) y+=31;
+
+  y=titleBar('5. AUDITORIA COMPACTA POR SEÇÃO',Object.keys(sectionMap).length,[71,85,105],y);
+  doc.setFont('helvetica','bold'); doc.setFontSize(6.1); doc.setTextColor(71,85,105); doc.text('SEÇÃO',11,y); doc.text('OK',122,y); doc.text('N/A',145,y); doc.text('AÇÃO',166,y); doc.text('TOTAL',191,y,{align:'right'}); y+=4;
+  for(const [sec,v] of Object.entries(sectionMap)){
+    y=ensure(y,5.2); doc.setFont('helvetica','normal'); doc.setFontSize(6.3); doc.setTextColor(15,23,42); doc.text(String(sec).slice(0,64),11,y); doc.text(String(v.ok),126,y,{align:'right'}); doc.text(String(v.na),149,y,{align:'right'}); doc.text(String(v.acoes),171,y,{align:'right'}); doc.text(String(v.total),191,y,{align:'right'}); doc.setDrawColor(238,242,247); doc.line(9,y+1.4,201,y+1.4); y+=4.2;
   }
-  if(y+18>281) y=newPage(); doc.setDrawColor(148,163,184); doc.line(12,y+8,70,y+8); doc.line(78,y+8,136,y+8); doc.line(144,y+8,198,y+8); doc.setFont('helvetica','normal'); doc.setFontSize(6.2); doc.setTextColor(100,116,139); doc.text('Responsável técnico',41,y+12,{align:'center'}); doc.text('Gestor / conferente',107,y+12,{align:'center'}); doc.text('Cliente / recebimento',171,y+12,{align:'center'});
+  y+=4;
+
+  const allPhotos=allPhotoEntries(data), photos=allPhotos.slice(0,8);
+  if(photos.length){
+    y=titleBar('6. FOTOS PRINCIPAIS',photos.length,[12,116,150],y); let col=0;
+    for(const ph of photos){ if(y+30>278){ y=newPage(); col=0; } const x=10+col*48,img=await imageForPdf(ph.url); doc.setDrawColor(226,232,240); doc.roundedRect(x,y,44,27,2,2,'S'); if(img){ try{ doc.addImage(img,'JPEG',x+1,y+1,42,21,undefined,'FAST'); }catch(e){ try{ doc.addImage(img,'PNG',x+1,y+1,42,21,undefined,'FAST'); }catch(_){} } } doc.setFont('helvetica','normal'); doc.setFontSize(5.6); doc.setTextColor(71,85,105); doc.text(String(ph.label||'Foto').slice(0,26),x+1,y+25); col++; if(col===4){ col=0; y+=31; } } if(col) y+=31;
+  }
+
+  y=ensure(y,18); doc.setDrawColor(148,163,184); doc.line(12,y+8,70,y+8); doc.line(78,y+8,136,y+8); doc.line(144,y+8,198,y+8); doc.setFont('helvetica','normal'); doc.setFontSize(6.2); doc.setTextColor(100,116,139); doc.text('Responsável técnico',41,y+12,{align:'center'}); doc.text('Gestor / conferente',107,y+12,{align:'center'}); doc.text('Cliente / recebimento',171,y+12,{align:'center'});
   const total=doc.internal.getNumberOfPages(); for(let n=1;n<=total;n++){ doc.setPage(n); footer(); }
-  const fileName=`${data.registroEntrega?'entrega':'checklist'}_${data.placa||'veiculo'}_${new Date().toISOString().slice(0,10)}.pdf`;
-  const blob=doc.output('blob');
-  if(mode==='blob') return {blob,fileName,data,paginas:total};
-  doc.save(fileName); return {blob,fileName,data,paginas:total};
+  const fileName=`${data.registroEntrega?'entrega':'checklist'}_${data.placa||'veiculo'}_${new Date().toISOString().slice(0,10)}.pdf`; const blob=doc.output('blob');
+  if(mode==='blob') return {blob,fileName,data,paginas:total}; doc.save(fileName); return {blob,fileName,data,paginas:total};
 }
-
-
 function gerarPDFEntrega(){ gerarPDF(entregaPayloadBase()); }
 function gerarXLSX(kind='checklist'){
   if(!window.XLSX){ toast('Biblioteca XLSX não carregou.'); return; }
@@ -1674,8 +1775,8 @@ function checklistResumoParaOS(data, entrega=false){
   return {
     id:data?.id||state.lastSavedId||uid(),
     tipo: entrega?'entrega':'tecnico',
-    app:data?.app||'OFICIN-IA-CHECKLIST-V15-23-2',
-    versao:data?.versao||'v15.23.2',
+    app:data?.app||'OFICIN-IA-CHECKLIST-V15-23-3',
+    versao:data?.versao||'v15.23.3',
     modeloVersao:data?.modeloVersao||state.model?.versao||'',
     placa:data?.placa||placaNorm($('placa')?.value||''),
     osRef:data?.osRef||($('osRef')?.value||'').trim(),
@@ -1930,7 +2031,7 @@ function bind(){
 }
 async function boot(){
   applyTheme(); bind();
-  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('./service-worker.js?v=15.23.2'); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
+  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('./service-worker.js?v=15.23.3'); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
   $('loginUsr').value=localStorage.getItem('OFICINIA_CHECKLIST_V15_LAST_USER')||localStorage.getItem('j_last_user')||'';
   await loadModel(false); loadSession(true);
   if(!state.session){ const fromSaas=readSaasSession(); if(fromSaas&&sessionOk(fromSaas)){ saveSession(fromSaas,!!localStorage.getItem('j_saved_login')); toast('Sessão do SAAS-2 reconhecida.'); } }

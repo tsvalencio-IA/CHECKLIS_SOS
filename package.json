@@ -1,8 +1,8 @@
 {
-  "name": "oficin-ia-checklist-v15-23-2-pdf-entrega",
-  "version": "15.23.2",
+  "name": "oficin-ia-checklist-v15-23-3-plano-acao",
+  "version": "15.23.3",
   "private": true,
-  "description": "OFICIN-IA Checklist V15.23.2: PDF com preview/download web e compartilhamento nativo Android.",
+  "description": "OFICIN-IA Checklist V15.23.3: PDFs reorganizados por comprar/cotar, executar e revisar/diagnosticar.",
   "scripts": {
     "prepare:apk": "node scripts/prepare-apk.js",
     "android:icons": "node scripts/generate-android-icons.js",

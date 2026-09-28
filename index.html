@@ -49,7 +49,7 @@
 
   <main class="wrap">
     <section class="card" id="screenLogin">
-      <div class="title"><h2>🔐 Login do Checklist</h2><span class="pill">V15.23.2</span></div>
+      <div class="title"><h2>🔐 Login do Checklist</h2><span class="pill">V15.23.3</span></div>
       <div class="notice bad">Sem login autorizado, nenhum checklist salvo ou histórico é exibido. Clientes não acessam esta área.</div>
       <div class="row2" style="margin-top:10px">
         <div><label>Usuário, login ou e-mail</label><input id="loginUsr" class="inp" autocomplete="username" placeholder="Ex: mecanico01 ou email@oficina.com"></div>
@@ -107,8 +107,8 @@
     <section class="card hidden" id="screenResumo">
       <div class="title"><h2>4) Relatório e exportações</h2><span class="pill" id="resumoPill">Pronto</span></div>
       <div id="resumoLista" class="res-list"></div>
-      <div class="actions"><button class="btn ok" id="btnSalvar" type="button">✅ Salvar / atualizar checklist</button><button class="btn" id="btnPDFEquipe" type="button">📄 PDF simples p/ equipe</button><button class="btn ok" id="btnCompartilharPDF" type="button">📲 Compartilhar PDF</button></div>
-      <div class="actions"><button class="btn" id="btnPDF" type="button">📄 PDF cotação 1-2 páginas</button><button class="btn secondary" id="btnXLSX" type="button">📊 XLSX inteligente</button><button class="btn secondary" id="btnPDFTecnico" type="button">📋 PDF técnico completo</button></div><div class="actions"><button class="btn secondary" id="btnFotoGeralResumo" type="button">📎 Adicionar fotos</button><button class="btn secondary" id="btnResumoRefresh" type="button">🔄 Reorganizar resumo</button><button class="btn secondary" id="btnA4" type="button">🖨️ Impressão A4</button></div>
+      <div class="actions"><button class="btn ok" id="btnSalvar" type="button">✅ Salvar / atualizar checklist</button><button class="btn" id="btnPDFEquipe" type="button">📄 Plano de ação p/ equipe</button><button class="btn ok" id="btnCompartilharPDF" type="button">📲 Compartilhar PDF</button></div>
+      <div class="actions"><button class="btn" id="btnPDF" type="button">📄 PDF cotação 1-2 páginas</button><button class="btn secondary" id="btnXLSX" type="button">📊 XLSX inteligente</button><button class="btn secondary" id="btnPDFTecnico" type="button">📋 PDF técnico / plano de ação</button></div><div class="actions"><button class="btn secondary" id="btnFotoGeralResumo" type="button">📎 Adicionar fotos</button><button class="btn secondary" id="btnResumoRefresh" type="button">🔄 Reorganizar resumo</button><button class="btn secondary" id="btnA4" type="button">🖨️ Impressão A4</button></div>
       <div class="actions"><button class="btn secondary" id="btnJSON" type="button">⬇️ JSON para O.S.</button><button class="btn warn" id="btnAnexarOS" type="button">📎 Anexar na O.S.</button><button class="btn secondary" id="btnHistoricoFinal" type="button">📜 Histórico</button></div>
       <div class="actions"><button class="btn secondary" id="btnEditarAtual" type="button">✏️ Continuar editando</button><button class="btn bad" id="btnExcluirAtual" type="button">🗑️ Excluir checklist salvo</button><button class="btn secondary" id="btnInicioResumo" type="button">🏠 Ir para início</button></div>
       <div class="actions"><button class="btn ok" id="btnEntrega" type="button">🚗 Checklist de entrega</button><button class="btn secondary" id="btnNovoFinal" type="button">🆕 Novo veículo</button><button class="btn secondary" id="btnTodosSalvosResumo" type="button">📚 Todos os salvos</button></div>
@@ -139,7 +139,7 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="./js/config.js?v=15.23.2"></script>
-  <script src="./js/checklist.js?v=15.23.2"></script>
+  <script src="./js/config.js?v=15.23.3"></script>
+  <script src="./js/checklist.js?v=15.23.3"></script>
 </body>
 </html>
