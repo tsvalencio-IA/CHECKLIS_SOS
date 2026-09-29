@@ -136,3 +136,14 @@ A impressão manual do mecânico foi compactada para o padrão oficina em até 2
 ### Microfone no PC
 
 Use Chrome ou Edge atualizado e permita o microfone quando o navegador solicitar. O GitHub Pages já usa HTTPS, requisito para acesso ao microfone.
+
+
+## V15.24 — integração operacional real com SAAS-2
+
+- Ao salvar/anexar um checklist técnico, a própria O.S. recebe `checklistOperacional`.
+- O resumo operacional fica separado em `pecasTrocar`, `servicosExecutar` e `atencoes`.
+- O checklist continua salvando o payload completo em `checklistResumo`; nada foi removido.
+- A O.S. recebe um evento em `timeline` informando quem salvou, data/hora e quantidades por grupo.
+- Também é criada entrada em `lixeira_auditoria`, que é a coleção de auditoria lida pelo SAAS-2.
+- O link canônico gravado na O.S. passa a ser `https://tsvalencio-ia.github.io/CHECKLIS_SOS/`.
+- Nenhum valor financeiro é incluído no resumo operacional do checklist.
