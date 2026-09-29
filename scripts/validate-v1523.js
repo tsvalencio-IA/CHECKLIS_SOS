@@ -6,5 +6,5 @@ if(sections.length!==16||items.length!==171) fail('Modelo incompleto: '+sections
 if(items.some(x=>!x||typeof x!=='object'||!x.id||!x.titulo||!Array.isArray(x.acoes))) fail('Item inválido'); if(new Set(items.map(x=>x.id)).size!==items.length) fail('IDs duplicados');
 for(const req of ['MODEL_DOC_ID','checklis_sos_v15','readSaasSession','buscarOficinaComoSaas','adminEmails','autosaveRealtime','startLiveChecklistFromConsulta','dictateToItem','obsPorVoz','gerarPdfSalvo','normalizeSavedChecklistForReport','PLANO DE AÇÃO — EQUIPE DA OFICINA','CHECKLIST TÉCNICO — PLANO DE AÇÃO','entregarPdfGerado','openPdfPreview','blobToBase64','buildQuoteData']) if(!js.includes(req)) fail('Recurso ausente: '+req);
 if(js.includes("collection('checklistModelos').doc('default').set")) fail('Gravação proibida no modelo default'); if(/(?<!\$)\$\('\[data-/.test(js)) fail('Seletor data-* usa $ em vez de $$');
-if(!html.includes('V15.24.0')||!html.includes('v=15.24.0')||!cfg.includes("version: '15.24.0'")||!sw.includes('v15.24.0-integracao-saas')) fail('Versão/cache inconsistente');
-console.log(JSON.stringify({ok:true,secoes:16,itens:171,modeloRemoto:'checklis_sos_v15',versao:'15.24.0'},null,2));
+if(!html.includes('V15.24.1')||!html.includes('v=15.24.1')||!cfg.includes("version: '15.24.1'")||!sw.includes('v15.24.1-integracao-saas')) fail('Versão/cache inconsistente');
+console.log(JSON.stringify({ok:true,secoes:16,itens:171,modeloRemoto:'checklis_sos_v15',versao:'15.24.1'},null,2));
