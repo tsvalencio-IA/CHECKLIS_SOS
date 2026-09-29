@@ -147,3 +147,11 @@ Use Chrome ou Edge atualizado e permita o microfone quando o navegador solicitar
 - Também é criada entrada em `lixeira_auditoria`, que é a coleção de auditoria lida pelo SAAS-2.
 - O link canônico gravado na O.S. passa a ser `https://tsvalencio-ia.github.io/CHECKLIS_SOS/`.
 - Nenhum valor financeiro é incluído no resumo operacional do checklist.
+
+
+## V15.24.1 — ação real como fonte de verdade
+
+- Corrigida divergência entre `acao` e `acaoLabel`.
+- O valor técnico `acao` passa a mandar sempre. Ex.: `acao: revisar` nunca poderá ser exibido/gravar como `Trocar` por causa de um label antigo.
+- `checklistResumo.itens`, `checklistUltimo.criticos` e `checklistOperacional` passam a sair com o label recalculado a partir da ação real no momento do salvamento.
+- Mantida a separação: `trocar` → peças; ações técnicas → serviços; `atencao/revisar` → atenção/observação.
