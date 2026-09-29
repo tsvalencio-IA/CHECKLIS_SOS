@@ -416,7 +416,7 @@ function modelLooksCompatible(model){
 }
 async function loadModel(tryRemote=false){
   let base=null; let model=null;
-  try{ const res=await fetch('./data/checklist-model.json?v=15.24.0',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
+  try{ const res=await fetch('./data/checklist-model.json?v=15.24.1',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
   try{ const saved=safeJson(localStorage.getItem(modelStorageKey()))||safeJson(localStorage.getItem(MODEL_KEY)); if(modelLooksCompatible(saved)) model=mergeEvolutionModel(base,saved); }catch(e){ console.warn('modelo local legado ignorado',e); }
   if(tryRemote && state.session){
     try{
@@ -888,13 +888,13 @@ function payloadBase(){
   const allItems=itemMap();
   const tecnico=($('tecnicoChecklist')?.value||state.session?.name||'').trim();
   const verificador=($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim();
-  const itens=Object.values(state.answers).map(a=>{ const fotos=state.itemPhotos[a.id]||[]; return {...a, fotos:fotos.length, fotoUrls:fotos, fotosUrls:fotos, criticidade:allItems[a.id]?.criticidade||'normal', obrigatorio:allItems[a.id]?.obrigatorio!==false}; });
+  const itens=Object.values(state.answers).map(a=>{ const fotos=state.itemPhotos[a.id]||[]; const acao=String(a.acao||'').trim(); return {...a, acao, acaoLabel:acao?String(actionInfo(acao)?.label||acao):'', fotos:fotos.length, fotoUrls:fotos, fotosUrls:fotos, criticidade:allItems[a.id]?.criticidade||'normal', obrigatorio:allItems[a.id]?.obrigatorio!==false}; });
   const osSel=state.osSelecionada||{}; const osRef=($('osRef')?.value||'').trim();
   const fotoUrls=[...(state.generalPhotos||[])]; const itemFotos=JSON.parse(JSON.stringify(state.itemPhotos||{}));
   const st=stats(); const ts=nowISO(); const statusChecklist=st.pending===0&&st.percent===100?'concluido':'em_producao';
   const criadoEm=state.currentCreatedAt||ts;
   const finalizadoEm=statusChecklist==='concluido'?(state.currentFinalizedAt||ts):'';
-  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-24-0', versao:'v15.24.0', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
+  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-24-1', versao:'v15.24.1', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
 }
 async function saveChecklist(){
   if(state.liveMonitor){ toast('Acompanhamento ao vivo é somente leitura. Abra em Editar para salvar alterações.'); return null; }
@@ -1350,7 +1350,7 @@ function entregaPayloadBase(){
   const base=payloadBase();
   const itens=getCriticalItems().map(i=>({checklistItemId:i.id, item:i.item, secao:i.secao, acao:i.acao, acaoLabel:i.acaoLabel, diagnosticoObs:i.obs, fotos:i.fotos||0, fotoUrls:i.fotoUrls||[], entrega:state.delivery[i.id]||{status:'pendente'}}));
   const dataEntrega=($('entregaData')?.value||'').trim();
-  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-24-0', versao:'v15.24.0', registroEntrega:true};
+  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-24-1', versao:'v15.24.1', registroEntrega:true};
 }
 async function saveEntrega(){
   setBusy('btnSalvarEntrega',true,'Salvando entrega...');
@@ -1772,18 +1772,23 @@ function printA4(entrega=false){
 function checklistOperacionalParaOS(data){
   const itens=Array.isArray(data?.itens)?data.itens:[];
   const checklistId=data?.id||state.lastSavedId||'';
-  const rows=itens.filter(i=>ACTIONS_FINAL.has(i.acao)).map((i,index)=>({
-    id:String(i.id||`item_${index}`),
-    key:`checklist:${checklistId||'atual'}:${String(i.id||index)}`,
-    checklistId,
-    secao:String(i.secao||'').trim(),
-    item:String(i.item||i.titulo||'Item').trim(),
-    acao:String(i.acao||'').trim(),
-    acaoLabel:String(i.acaoLabel||actionInfo(i.acao).label||i.acao||'').trim(),
-    obs:String(i.obs||i.diagnosticoObs||'').trim(),
-    fotoUrls:Array.isArray(i.fotoUrls)?i.fotoUrls:(Array.isArray(i.fotosUrls)?i.fotosUrls:[]),
-    criticidade:String(i.criticidade||'').trim()
-  }));
+  const rows=itens.filter(i=>ACTIONS_FINAL.has(i.acao)).map((i,index)=>{
+    const acao=String(i.acao||'').trim();
+    return {
+      id:String(i.id||`item_${index}`),
+      key:`checklist:${checklistId||'atual'}:${String(i.id||index)}`,
+      checklistId,
+      secao:String(i.secao||'').trim(),
+      item:String(i.item||i.titulo||'Item').trim(),
+      acao,
+      // A ação é a fonte de verdade. Nunca reaproveitar um acaoLabel antigo
+      // (ex.: acao='revisar' com label legado 'Trocar').
+      acaoLabel:String(actionInfo(acao)?.label||acao).trim(),
+      obs:String(i.obs||i.diagnosticoObs||'').trim(),
+      fotoUrls:Array.isArray(i.fotoUrls)?i.fotoUrls:(Array.isArray(i.fotosUrls)?i.fotosUrls:[]),
+      criticidade:String(i.criticidade||'').trim()
+    };
+  });
   const pecasTrocar=rows.filter(i=>i.acao==='trocar');
   const servicosExecutar=rows.filter(i=>SERVICO_ACTIONS.has(i.acao));
   const atencoes=rows.filter(i=>AVALIAR_ACTIONS.has(i.acao));
@@ -1804,8 +1809,8 @@ function checklistResumoParaOS(data, entrega=false){
   return {
     id:data?.id||state.lastSavedId||uid(),
     tipo: entrega?'entrega':'tecnico',
-    app:data?.app||'OFICIN-IA-CHECKLIST-V15-24-0',
-    versao:data?.versao||'v15.24.0',
+    app:data?.app||'OFICIN-IA-CHECKLIST-V15-24-1',
+    versao:data?.versao||'v15.24.1',
     modeloVersao:data?.modeloVersao||state.model?.versao||'',
     placa:data?.placa||placaNorm($('placa')?.value||''),
     osRef:data?.osRef||($('osRef')?.value||'').trim(),
@@ -1829,7 +1834,10 @@ function checklistResumoParaOS(data, entrega=false){
     statusChecklist:data?.statusChecklist||checklistStatusOf(data||payloadBase()),
     progressoPercent:data?.progressoPercent??data?.stats?.percent??stats().percent,
     itensPendentes:data?.itensPendentes??data?.stats?.pending??stats().pending,
-    criticos:crit.slice(0,60).map(i=>({id:i.id,secao:i.secao,item:i.item,acao:i.acao,acaoLabel:i.acaoLabel,obs:i.obs||'',fotoUrls:i.fotoUrls||[]})),
+    criticos:crit.slice(0,60).map(i=>{
+      const acao=String(i.acao||'').trim();
+      return {id:i.id,secao:i.secao,item:i.item,acao,acaoLabel:String(actionInfo(acao)?.label||acao),obs:i.obs||'',fotoUrls:i.fotoUrls||[]};
+    }),
     totalCriticos:crit.length,
     operacional:entrega?null:checklistOperacionalParaOS({...data,id:data?.id||state.lastSavedId||''}),
     urlChecklist:'https://tsvalencio-ia.github.io/CHECKLIS_SOS/'
@@ -2115,7 +2123,7 @@ function bind(){
 }
 async function boot(){
   applyTheme(); bind();
-  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('./service-worker.js?v=15.24.0'); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
+  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('./service-worker.js?v=15.24.1'); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
   $('loginUsr').value=localStorage.getItem('OFICINIA_CHECKLIST_V15_LAST_USER')||localStorage.getItem('j_last_user')||'';
   await loadModel(false); loadSession(true);
   if(!state.session){ const fromSaas=readSaasSession(); if(fromSaas&&sessionOk(fromSaas)){ saveSession(fromSaas,!!localStorage.getItem('j_saved_login')); toast('Sessão do SAAS-2 reconhecida.'); } }
