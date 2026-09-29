@@ -36,10 +36,10 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const pkg = {
-            name: 'oficin-ia-checklist-v15-23-3-plano-acao',
-            version: '15.23.3',
+            name: 'oficin-ia-checklist-v15-24-0-plano-acao',
+            version: '15.24.0',
             private: true,
-            description: 'OFICIN-IA Checklist V15.23.3 com sincronização em tempo real, acompanhamento ao vivo e observações por voz.',
+            description: 'OFICIN-IA Checklist V15.24.0 com sincronização em tempo real, acompanhamento ao vivo e observações por voz.',
             scripts: {
               'prepare:apk': 'node scripts/prepare-apk.js',
               'android:icons': 'node scripts/generate-android-icons.js',
@@ -79,7 +79,7 @@ jobs:
           if(total < 160) throw new Error('Modelo do checklist incompleto: '+total+' itens');
           const js=fs.readFileSync('js/checklist.js','utf8');
           for(const req of ['autosaveRealtime','startLiveChecklistFromConsulta','Falar observação','obsPorVoz','normalizeSavedChecklistForReport','gerarPdfSalvo','normalizeModelShape','MODEL_DOC_ID','buscarOficinaComoSaas','readSaasSession','PLANO DE AÇÃO — EQUIPE DA OFICINA','SAAS-2']){
-            if(!js.includes(req)) throw new Error('Recurso V15.23.3 ausente: '+req);
+            if(!js.includes(req)) throw new Error('Recurso V15.24.0 ausente: '+req);
           }
           if(!pkg.dependencies?.['@capacitor-community/speech-recognition']) throw new Error('Plugin nativo de voz ausente.');
           if(!pkg.dependencies?.['@capacitor/filesystem'] || !pkg.dependencies?.['@capacitor/share']) throw new Error('Plugins nativos de PDF ausentes.');
@@ -157,5 +157,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: OFICIN-IA-CHECKLIST-V15-23-3-PLANO-ACAO
+          name: OFICIN-IA-CHECKLIST-V15-24-0-PLANO-ACAO
           path: android/app/build/outputs/apk/debug/app-debug.apk
