@@ -1,7 +1,7 @@
 'use strict';
-const CACHE_NAME = 'oficin-ia-checklist-v15.24.1-integracao-saas';
+const CACHE_NAME = 'checklis-sos-v15.24.2-pwa-separada';
 const CORE = [
-  './', './index.html', './checklist.html', './login.html', './manifest.webmanifest',
+  './', './index.html', './checklist.html', './login.html', './manifest.webmanifest?v=15.24.2',
   './js/config.js', './js/checklist.js', './data/checklist-model.json',
   './assets/icons/checklist-192.png', './assets/icons/checklist-512.png', './assets/icon.png'
 ];
