@@ -416,7 +416,7 @@ function modelLooksCompatible(model){
 }
 async function loadModel(tryRemote=false){
   let base=null; let model=null;
-  try{ const res=await fetch('./data/checklist-model.json?v=15.24.2',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
+  try{ const res=await fetch('./data/checklist-model.json?v=15.24.3',{cache:'no-store'}); base=normalizeModelShape(null,await res.json()); model=base; }catch(e){ console.warn('model local',e); }
   try{ const saved=safeJson(localStorage.getItem(modelStorageKey()))||safeJson(localStorage.getItem(MODEL_KEY)); if(modelLooksCompatible(saved)) model=mergeEvolutionModel(base,saved); }catch(e){ console.warn('modelo local legado ignorado',e); }
   if(tryRemote && state.session){
     try{
@@ -894,7 +894,7 @@ function payloadBase(){
   const st=stats(); const ts=nowISO(); const statusChecklist=st.pending===0&&st.percent===100?'concluido':'em_producao';
   const criadoEm=state.currentCreatedAt||ts;
   const finalizadoEm=statusChecklist==='concluido'?(state.currentFinalizedAt||ts):'';
-  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-24-2', versao:'v15.24.2', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
+  return { id:state.lastSavedId||uid(), app:'OFICIN-IA-CHECKLIST-V15-24-2', versao:'v15.24.3', modeloVersao:state.model?.versao||'', tenantId:state.session?.tenantId||'', oficinaNome:state.session?.oficinaNome||'', placa, osRef, osId:osSel.id||'', osColecao:osSel._col||'', osNumero:osSel.numero||osSel.codigo||osSel.osRef||osRef, osLabel:osSel.label||osRef, osStatus:osSel.status||osSel.etapa||'', osCliente:osSel.clienteNome||osSel.nomeCliente||osSel.cliente?.nome||'', osVeiculo:osSel.veiculoLabel||osSel.veiculoModelo||osSel.veiculo||osSel.veiculoSnapshot?.modelo||'', km:($('km')?.value||'').trim(), responsavel:tecnico, tecnicoChecklist:tecnico, tecnicoNome:tecnico, responsavelLogin:state.session?.name||'', responsavelPerfil:state.session?.role||'', verificadorEntrega:verificador, relato:($('relato')?.value||'').trim(), diagnostico:($('diagnostico')?.value||'').trim(), itens, fotosGerais:fotoUrls.length, fotoUrls, fotosGeraisUrls:fotoUrls, itemPhotos:itemFotos, itemFotos, temAudio:!!state.audioUrl, stats:st, statusChecklist, progressoPercent:st.percent, itensPendentes:st.pending, itensRespondidos:Math.max(allChecklistItems().length-st.pending,0), totalItensModelo:allChecklistItems().length, criadoEm, atualizadoEm:ts, finalizadoEm };
 }
 async function saveChecklist(){
   if(state.liveMonitor){ toast('Acompanhamento ao vivo é somente leitura. Abra em Editar para salvar alterações.'); return null; }
@@ -1350,7 +1350,7 @@ function entregaPayloadBase(){
   const base=payloadBase();
   const itens=getCriticalItems().map(i=>({checklistItemId:i.id, item:i.item, secao:i.secao, acao:i.acao, acaoLabel:i.acaoLabel, diagnosticoObs:i.obs, fotos:i.fotos||0, fotoUrls:i.fotoUrls||[], entrega:state.delivery[i.id]||{status:'pendente'}}));
   const dataEntrega=($('entregaData')?.value||'').trim();
-  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-24-2', versao:'v15.24.2', registroEntrega:true};
+  return {id:uid(), checklistId:state.lastSavedId||base.id, tenantId:base.tenantId, oficinaNome:base.oficinaNome, placa:base.placa, osRef:base.osRef, osId:base.osId, osColecao:base.osColecao, osNumero:base.osNumero, osLabel:base.osLabel, km:base.km, tecnicoChecklist:base.tecnicoChecklist||base.responsavel, responsavel:base.responsavel, conferente:($('conferente')?.value||$('verificadorEntrega')?.value||state.session?.name||'').trim(), verificadorEntrega:($('verificadorEntrega')?.value||$('conferente')?.value||state.session?.name||'').trim(), entreguePor:($('entregaEntreguePor')?.value||'').trim(), recebidoPor:($('entregaRecebidoPor')?.value||'').trim(), documentoRecebedor:($('entregaDoc')?.value||'').trim(), dataEntrega:dataEntrega||nowISO(), perfil:state.session?.role||'', status:$('entregaStatus')?.value||'em_conferencia', observacaoFinal:$('entregaObs')?.value||'', itens, fotoUrls:base.fotoUrls||[], fotosGeraisUrls:base.fotoUrls||[], itemPhotos:base.itemPhotos||{}, itemFotos:base.itemFotos||{}, criadoEm:nowISO(), atualizadoEm:nowISO(), app:'OFICIN-IA-CHECKLIST-V15-24-2', versao:'v15.24.3', registroEntrega:true};
 }
 async function saveEntrega(){
   setBusy('btnSalvarEntrega',true,'Salvando entrega...');
@@ -1810,7 +1810,7 @@ function checklistResumoParaOS(data, entrega=false){
     id:data?.id||state.lastSavedId||uid(),
     tipo: entrega?'entrega':'tecnico',
     app:data?.app||'OFICIN-IA-CHECKLIST-V15-24-2',
-    versao:data?.versao||'v15.24.2',
+    versao:data?.versao||'v15.24.3',
     modeloVersao:data?.modeloVersao||state.model?.versao||'',
     placa:data?.placa||placaNorm($('placa')?.value||''),
     osRef:data?.osRef||($('osRef')?.value||'').trim(),
@@ -2123,7 +2123,7 @@ function bind(){
 }
 async function boot(){
   applyTheme(); bind();
-  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('/CHECKLIS_SOS/service-worker.js?v=15.24.2',{scope:'/CHECKLIS_SOS/'}); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
+  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('/CHECKLIS_SOS/service-worker.js?v=15.24.3',{scope:'/CHECKLIS_SOS/'}); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
   $('loginUsr').value=localStorage.getItem('OFICINIA_CHECKLIST_V15_LAST_USER')||localStorage.getItem('j_last_user')||'';
   await loadModel(false); loadSession(true);
   if(!state.session){ const fromSaas=readSaasSession(); if(fromSaas&&sessionOk(fromSaas)){ saveSession(fromSaas,!!localStorage.getItem('j_saved_login')); toast('Sessão do SAAS-2 reconhecida.'); } }
