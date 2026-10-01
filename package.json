@@ -1,8 +1,8 @@
 {
-  "name": "oficin-ia-checklist-v15-24-1-plano-acao",
-  "version": "15.24.1",
+  "name": "oficin-ia-checklist-v15-24-2-plano-acao",
+  "version": "15.24.2",
   "private": true,
-  "description": "OFICIN-IA Checklist V15.24.1: PDFs reorganizados por comprar/cotar, executar e revisar/diagnosticar.",
+  "description": "OFICIN-IA Checklist V15.24.2: PDFs reorganizados por comprar/cotar, executar e revisar/diagnosticar.",
   "scripts": {
     "prepare:apk": "node scripts/prepare-apk.js",
     "android:icons": "node scripts/generate-android-icons.js",
