@@ -149,7 +149,7 @@ Use Chrome ou Edge atualizado e permita o microfone quando o navegador solicitar
 - Nenhum valor financeiro é incluído no resumo operacional do checklist.
 
 
-## V15.24.1 — ação real como fonte de verdade
+## V15.24.2 — ação real como fonte de verdade
 
 - Corrigida divergência entre `acao` e `acaoLabel`.
 - O valor técnico `acao` passa a mandar sempre. Ex.: `acao: revisar` nunca poderá ser exibido/gravar como `Trocar` por causa de um label antigo.
