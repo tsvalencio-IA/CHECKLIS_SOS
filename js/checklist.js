@@ -2123,7 +2123,7 @@ function bind(){
 }
 async function boot(){
   applyTheme(); bind();
-  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('./service-worker.js?v=15.24.1'); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
+  if('serviceWorker' in navigator){ try{ const reg=await navigator.serviceWorker.register('/CHECKLIS_SOS/service-worker.js?v=15.24.2',{scope:'/CHECKLIS_SOS/'}); await reg.update(); }catch(e){ console.warn('sw',e.message); } }
   $('loginUsr').value=localStorage.getItem('OFICINIA_CHECKLIST_V15_LAST_USER')||localStorage.getItem('j_last_user')||'';
   await loadModel(false); loadSession(true);
   if(!state.session){ const fromSaas=readSaasSession(); if(fromSaas&&sessionOk(fromSaas)){ saveSession(fromSaas,!!localStorage.getItem('j_saved_login')); toast('Sessão do SAAS-2 reconhecida.'); } }
